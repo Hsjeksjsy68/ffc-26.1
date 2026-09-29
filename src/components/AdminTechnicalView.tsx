@@ -20,7 +20,14 @@ import {
   Eye,
   Plus,
   Minus,
-  Undo2
+  Undo2,
+  UserCheck,
+  UserX,
+  Link,
+  Unlink,
+  Trash2,
+  CheckCircle,
+  Mail
 } from 'lucide-react';
 
 export const AdminTechnicalView: React.FC = () => {
@@ -42,11 +49,20 @@ export const AdminTechnicalView: React.FC = () => {
     isUserPlayer,
     canEditTactics,
     canChangeLogo,
-    canResetData
+    canResetData,
+    accountRequests,
+    approveAccountRequest,
+    rejectAccountRequest,
+    deleteAccountRequest,
+    linkPlayerToUser,
+    availableUsers
   } = useClub();
 
-  const [activeAdminTab, setActiveAdminTab] = useState<'tactics' | 'fines' | 'logo' | 'settings'>('tactics');
+  const [activeAdminTab, setActiveAdminTab] = useState<'tactics' | 'accounts' | 'linking' | 'fines' | 'logo' | 'settings'>('tactics');
   const [selectedSlotKey, setSelectedSlotKey] = useState<string | null>(null);
+  const [selectedPlayerToLink, setSelectedPlayerToLink] = useState<Record<string, string>>({});
+  const [selectedUserForPlayer, setSelectedUserForPlayer] = useState<Record<string, string>>({});
+  const [linkingSuccess, setLinkingSuccess] = useState<string | null>(null);
 
   // Drag & free player positioning state
   const [draggingSlot, setDraggingSlot] = useState<string | null>(null);
@@ -617,6 +633,40 @@ export const AdminTechnicalView: React.FC = () => {
           >
             ⚽ TACTICAL PITCH & XI {!canEditTactics && '(VIEW ONLY)'}
           </button>
+
+          {isUserAdmin && (
+            <>
+              <button
+                id="admin-tab-accounts"
+                onClick={() => setActiveAdminTab('accounts')}
+                className={`px-3 py-1.5 border-2 border-black text-xs font-black uppercase transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                  activeAdminTab === 'accounts'
+                    ? 'bg-[#0084FF] text-white shadow-[2px_2px_0px_0px_#000]'
+                    : 'bg-[#F6F5EE] text-black hover:bg-neutral-200'
+                }`}
+              >
+                <span>📋 একাউন্ট রিকোয়েস্ট</span>
+                {accountRequests.filter(r => r.status === 'pending').length > 0 && (
+                  <span className="bg-[#D71920] text-white text-[10px] font-black px-1.5 py-0.2 rounded-full border border-white">
+                    {accountRequests.filter(r => r.status === 'pending').length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                id="admin-tab-linking"
+                onClick={() => setActiveAdminTab('linking')}
+                className={`px-3 py-1.5 border-2 border-black text-xs font-black uppercase transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                  activeAdminTab === 'linking'
+                    ? 'bg-[#22C55E] text-black shadow-[2px_2px_0px_0px_#000]'
+                    : 'bg-[#F6F5EE] text-black hover:bg-neutral-200'
+                }`}
+              >
+                <span>🔗 রোস্টার ও একাউন্ট সংযোগ</span>
+              </button>
+            </>
+          )}
+
           <button
             id="admin-tab-fines"
             onClick={() => setActiveAdminTab('fines')}

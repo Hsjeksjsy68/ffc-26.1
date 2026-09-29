@@ -18,7 +18,8 @@ import {
   TechnicalSettings,
   FineRule,
   PlayerFine,
-  ClubLogoSettings
+  ClubLogoSettings,
+  AccountRequest
 } from '../types';
 import {
   INITIAL_PLAYERS,
@@ -54,6 +55,7 @@ const COLLECTION_ATTENDANCE = 'ffc_attendance';
 const COLLECTION_GROUPS = 'ffc_chat_groups';
 const COLLECTION_MESSAGES = 'ffc_chat_messages';
 const COLLECTION_SYSTEM = 'ffc_system';
+const COLLECTION_REQUESTS = 'ffc_account_requests';
 
 // Check if database connection is functional
 export const isDbAvailable = (): boolean => {
@@ -302,5 +304,25 @@ export async function savePlayerFinesToDataCenter(fines: PlayerFine[]): Promise<
     await setDoc(doc(db, COLLECTION_SYSTEM, 'player_fines'), cleanFirestoreData({ fines }));
   } catch (err) {
     console.error('[FFC DATA CENTER] Failed to save player fines:', err);
+  }
+}
+
+// Save or update an account registration request
+export async function saveAccountRequestToDataCenter(req: AccountRequest): Promise<void> {
+  if (!db) return;
+  try {
+    await setDoc(doc(db, COLLECTION_REQUESTS, req.id), cleanFirestoreData(req));
+  } catch (err) {
+    console.error('[FFC DATA CENTER] Failed to save account request:', err);
+  }
+}
+
+// Delete an account request
+export async function deleteAccountRequestFromDataCenter(id: string): Promise<void> {
+  if (!db) return;
+  try {
+    await deleteDoc(doc(db, COLLECTION_REQUESTS, id));
+  } catch (err) {
+    console.error('[FFC DATA CENTER] Failed to delete account request:', err);
   }
 }

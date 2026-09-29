@@ -36,6 +36,25 @@ export interface Player {
   nationality: string;
   phone?: string;
   tacticalNotes?: string;
+  linkedUserId?: string;
+  linkedUserEmail?: string;
+}
+
+export interface AccountRequest {
+  id: string;
+  name: string;
+  email: string;
+  password?: string;
+  requestedRole: 'player' | 'coach' | 'admin';
+  requestedPosition?: Position;
+  requestedNumber?: number;
+  notes?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  submittedAt: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  linkedPlayerId?: string;
+  rejectionReason?: string;
 }
 
 export type EventType = 'Match' | 'Training' | 'Briefing' | 'Club Event';

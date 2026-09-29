@@ -14,7 +14,9 @@ import {
   RealtimeEventLog,
   UserType,
   PlayerMatchPerformance,
-  MatchDetails
+  MatchDetails,
+  AccountRequest,
+  Position
 } from '../types';
 import {
   INITIAL_PLAYERS,
@@ -52,7 +54,9 @@ import {
   saveLogoToDataCenter,
   saveUsersToDataCenter,
   saveFineRulesToDataCenter,
-  savePlayerFinesToDataCenter
+  savePlayerFinesToDataCenter,
+  saveAccountRequestToDataCenter,
+  deleteAccountRequestFromDataCenter
 } from '../lib/firestoreService';
 import { collection, onSnapshot } from 'firebase/firestore';
 
@@ -71,6 +75,8 @@ export interface UserProfile {
   firebaseUid?: string;
   photoURL?: string;
   authProvider?: 'google' | 'password' | 'pin' | 'demo';
+  linkedPlayerId?: string;
+  status?: 'active' | 'pending' | 'disabled';
 }
 
 interface ClubContextType {
@@ -94,6 +100,22 @@ interface ClubContextType {
   setIsLoginPanelOpen: (open: boolean) => void;
   openLoginPanel: () => void;
   registerUser: (newUser: UserProfile) => void;
+
+  // Account creation request & approval workflow
+  accountRequests: AccountRequest[];
+  submitAccountRequest: (req: {
+    name: string;
+    email: string;
+    password?: string;
+    requestedRole: 'player' | 'coach' | 'admin';
+    requestedPosition?: Position;
+    requestedNumber?: number;
+    notes?: string;
+  }) => Promise<{ success: boolean; message: string }>;
+  approveAccountRequest: (requestId: string, linkPlayerId?: string) => Promise<void>;
+  rejectAccountRequest: (requestId: string, reason?: string) => Promise<void>;
+  deleteAccountRequest: (requestId: string) => Promise<void>;
+  linkPlayerToUser: (playerId: string, userId: string | null) => Promise<void>;
 
   // Firebase Real Auth Integration
   firebaseUser: FirebaseUser | null;
@@ -341,13 +363,18 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return saved ? JSON.parse(saved) : DEFAULT_CLUB_OPERATOR;
   });
 
-  // Authentication state - single login box control
+  // Authentication state - strict security control (must explicitly be logged in)
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
-    const saved = localStorage.getItem('flamehunter_is_logged_in');
-    return saved !== null ? saved === 'true' : true;
+    return localStorage.getItem('flamehunter_is_logged_in') === 'true';
   });
   const [isLoginPanelOpen, setIsLoginPanelOpen] = useState<boolean>(false);
   const openLoginPanel = () => setIsLoginPanelOpen(true);
+
+  // Account creation requests state
+  const [accountRequests, setAccountRequests] = useState<AccountRequest[]>(() => {
+    const saved = localStorage.getItem('flamehunter_account_requests');
+    return saved ? JSON.parse(saved) : [];
+  });
 
   // Firebase Auth State
   const [firebaseUser] = useState<FirebaseUser | null>(null);
@@ -377,11 +404,194 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logoutUser = async () => {
     setIsLoggedIn(false);
+    localStorage.removeItem('flamehunter_is_logged_in');
+    localStorage.removeItem('flamehunter_current_user');
     setIsLoginPanelOpen(true);
   };
 
   const registerUser = (newUser: UserProfile) => {
     setAvailableUsers(prev => [newUser, ...prev]);
+  };
+
+  // Submit a new account creation request for Admin review
+  const submitAccountRequest = async (req: {
+    name: string;
+    email: string;
+    password?: string;
+    requestedRole: 'player' | 'coach' | 'admin';
+    requestedPosition?: Position;
+    requestedNumber?: number;
+    notes?: string;
+  }): Promise<{ success: boolean; message: string }> => {
+    const normEmail = req.email.trim().toLowerCase();
+
+    // Check if user already exists
+    if (availableUsers.some(u => u.email?.toLowerCase() === normEmail)) {
+      return { success: false, message: 'এই ইমেইল দিয়ে ইতোমধ্যে একটি সক্রিয় একাউন্ট রয়েছে। দয়া করে লগইন করুন।' };
+    }
+
+    // Check if request is already pending
+    const existing = accountRequests.find(r => r.email.toLowerCase() === normEmail && r.status === 'pending');
+    if (existing) {
+      return { success: false, message: 'আপনার একাউন্ট রিকোয়েস্ট ইতোমধ্যে পেন্ডিং রয়েছে। ক্লাবের অ্যাডমিন অনুমোদনের অপেক্ষা করুন।' };
+    }
+
+    const newReq: AccountRequest = {
+      id: `req_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      name: req.name.trim(),
+      email: normEmail,
+      password: req.password,
+      requestedRole: req.requestedRole,
+      requestedPosition: req.requestedPosition,
+      requestedNumber: req.requestedNumber,
+      notes: req.notes?.trim() || '',
+      status: 'pending',
+      submittedAt: new Date().toLocaleString()
+    };
+
+    setAccountRequests(prev => [newReq, ...prev]);
+    localStorage.setItem('flamehunter_account_requests', JSON.stringify([newReq, ...accountRequests]));
+    await saveAccountRequestToDataCenter(newReq);
+    logRealtimeEvent('ffc_account_requests', 'WRITE', `New account access request from ${newReq.name} (${newReq.email})`);
+
+    return {
+      success: true,
+      message: '✅ আপনার একাউন্ট রিকোয়েস্ট সফলভাবে ক্লাবের অ্যাডমিনের কাছে পাঠানো হয়েছে! অ্যাডমিন অনুমোদন (Accept) করার পর আপনি লগইন করতে পারবেন।'
+    };
+  };
+
+  // Admin approves account request
+  const approveAccountRequest = async (requestId: string, linkPlayerId?: string): Promise<void> => {
+    const req = accountRequests.find(r => r.id === requestId);
+    if (!req) return;
+
+    const updatedReq: AccountRequest = {
+      ...req,
+      status: 'approved',
+      reviewedAt: new Date().toLocaleString(),
+      reviewedBy: currentUser.name,
+      linkedPlayerId: linkPlayerId || undefined
+    };
+
+    // Create user profile
+    const newUser: UserProfile = {
+      id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      name: req.name,
+      email: req.email,
+      role: req.requestedRole === 'admin' ? 'Club Administrator' : req.requestedRole === 'coach' ? 'Tactical Coach' : 'Squad Player',
+      userType: req.requestedRole,
+      isAdmin: req.requestedRole === 'admin',
+      avatarBg: req.requestedRole === 'admin' ? '#D71920' : req.requestedRole === 'coach' ? '#0066B2' : '#22C55E',
+      badgeNumber: req.requestedNumber || (req.requestedRole === 'admin' ? 100 : 9),
+      department: req.requestedRole === 'admin' ? 'Board & Operations' : req.requestedRole === 'coach' ? 'Tactics & Training' : 'First Team Squad',
+      linkedPlayerId: linkPlayerId || undefined,
+      status: 'active'
+    };
+
+    // If linking player, update that player in squad roster
+    if (linkPlayerId) {
+      setPlayers(prev => prev.map(p => {
+        if (p.id === linkPlayerId) {
+          const updatedP = { ...p, linkedUserId: newUser.id, linkedUserEmail: newUser.email };
+          savePlayerToDataCenter(updatedP);
+          return updatedP;
+        }
+        return p;
+      }));
+    }
+
+    setAvailableUsers(prev => {
+      const updated = [newUser, ...prev.filter(u => u.email?.toLowerCase() !== req.email.toLowerCase())];
+      localStorage.setItem('flamehunter_available_users', JSON.stringify(updated));
+      saveUsersToDataCenter(updated);
+      return updated;
+    });
+
+    setAccountRequests(prev => {
+      const updated = prev.map(r => r.id === requestId ? updatedReq : r);
+      localStorage.setItem('flamehunter_account_requests', JSON.stringify(updated));
+      return updated;
+    });
+
+    await saveAccountRequestToDataCenter(updatedReq);
+    logRealtimeEvent('ffc_account_requests', 'WRITE', `Approved account request for ${req.name} (${req.email})`);
+  };
+
+  // Admin rejects account request
+  const rejectAccountRequest = async (requestId: string, reason?: string): Promise<void> => {
+    const req = accountRequests.find(r => r.id === requestId);
+    if (!req) return;
+
+    const updatedReq: AccountRequest = {
+      ...req,
+      status: 'rejected',
+      reviewedAt: new Date().toLocaleString(),
+      reviewedBy: currentUser.name,
+      rejectionReason: reason || 'Access denied by club administrator'
+    };
+
+    setAccountRequests(prev => {
+      const updated = prev.map(r => r.id === requestId ? updatedReq : r);
+      localStorage.setItem('flamehunter_account_requests', JSON.stringify(updated));
+      return updated;
+    });
+
+    await saveAccountRequestToDataCenter(updatedReq);
+    logRealtimeEvent('ffc_account_requests', 'WRITE', `Rejected account request for ${req.name}`);
+  };
+
+  // Delete account request from history
+  const deleteAccountRequest = async (requestId: string): Promise<void> => {
+    setAccountRequests(prev => {
+      const updated = prev.filter(r => r.id !== requestId);
+      localStorage.setItem('flamehunter_account_requests', JSON.stringify(updated));
+      return updated;
+    });
+    await deleteAccountRequestFromDataCenter(requestId);
+  };
+
+  // Admin connects a Squad Player in Roster with an active User Account
+  const linkPlayerToUser = async (playerId: string, userId: string | null): Promise<void> => {
+    let targetUser: UserProfile | undefined;
+    if (userId) {
+      targetUser = availableUsers.find(u => u.id === userId);
+    }
+
+    // Update Player
+    setPlayers(prev => prev.map(p => {
+      if (p.id === playerId) {
+        const updated: Player = {
+          ...p,
+          linkedUserId: userId || undefined,
+          linkedUserEmail: targetUser?.email || undefined
+        };
+        savePlayerToDataCenter(updated);
+        return updated;
+      }
+      return p;
+    }));
+
+    // Update UserProfile
+    if (userId) {
+      setAvailableUsers(prev => prev.map(u => {
+        if (u.id === userId) {
+          return { ...u, linkedPlayerId: playerId };
+        }
+        if (u.linkedPlayerId === playerId) {
+          return { ...u, linkedPlayerId: undefined };
+        }
+        return u;
+      }));
+    } else {
+      setAvailableUsers(prev => prev.map(u => {
+        if (u.linkedPlayerId === playerId) {
+          return { ...u, linkedPlayerId: undefined };
+        }
+        return u;
+      }));
+    }
+
+    logRealtimeEvent('ffc_players', 'WRITE', `Linked player ${playerId} with user account ${targetUser?.email || 'unlinked'}`);
   };
 
   const loginWithGoogle = async (): Promise<UserProfile> => {
@@ -710,6 +920,18 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn('[FFC DATA CENTER] System sync notice:', err);
     });
 
+    // 6. Account Requests Stream
+    const unsubRequests = onSnapshot(collection(db, 'ffc_account_requests'), (snap) => {
+      const fetched: AccountRequest[] = [];
+      snap.forEach(docSnap => fetched.push(docSnap.data() as AccountRequest));
+      setAccountRequests(fetched);
+      localStorage.setItem('flamehunter_account_requests', JSON.stringify(fetched));
+    }, (err: any) => {
+      if (err?.code !== 'unavailable') {
+        console.warn('[FFC DATA CENTER] Account requests stream notice:', err);
+      }
+    });
+
     return () => {
       unsubPlayers();
       unsubEvents();
@@ -717,6 +939,7 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
       unsubGroups();
       unsubMessages();
       unsubSystem();
+      unsubRequests();
     };
   }, []);
 
@@ -1487,6 +1710,12 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsLoginPanelOpen,
         openLoginPanel,
         registerUser,
+        accountRequests,
+        submitAccountRequest,
+        approveAccountRequest,
+        rejectAccountRequest,
+        deleteAccountRequest,
+        linkPlayerToUser,
         firebaseUser,
         authLoading,
         loginWithGoogle,
