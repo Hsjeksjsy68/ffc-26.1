@@ -1,0 +1,7 @@
+{
+  "name": "Flamehunter FC Manager",
+  "description": "Neo-brutalist club management platform for Flamehunter FC: player stats, schedules, team events, chat & groups, individual attendance tracking, and technical admin controls.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

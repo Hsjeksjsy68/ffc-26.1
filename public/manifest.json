@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "Flamehunter FC Manager",
+  "short_name": "Flamehunter",
+  "description": "Neo-brutalist club management platform for Flamehunter FC: player stats, schedules, attendance, team announcements and phone push alerts.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#0066B2",
+  "background_color": "#F6F7FA",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

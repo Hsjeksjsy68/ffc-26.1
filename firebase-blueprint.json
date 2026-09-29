@@ -1,0 +1,81 @@
+{
+  "entities": {
+    "Player": {
+      "title": "Player",
+      "description": "Flamehunter FC roster players and performance metrics",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "number": { "type": "number" },
+        "position": { "type": "string" },
+        "role": { "type": "string" },
+        "fitness": { "type": "string" },
+        "rating": { "type": "number" }
+      },
+      "required": ["id", "name", "number", "position"]
+    },
+    "ClubEvent": {
+      "title": "ClubEvent",
+      "description": "Fixtures, matches, training sessions, and briefings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "title", "type", "date", "time", "status"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "Session attendance sheets and player self-checkins",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "eventId": { "type": "string" },
+        "date": { "type": "string" },
+        "records": { "type": "object" }
+      },
+      "required": ["id", "eventId", "date", "records"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Team chat and direct communications",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "groupId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "groupId", "senderId", "senderName", "text", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/players/{playerId}": {
+      "schema": "Player",
+      "description": "Collection of team players"
+    },
+    "/events/{eventId}": {
+      "schema": "ClubEvent",
+      "description": "Fixtures and scheduled events"
+    },
+    "/attendance/{attendanceId}": {
+      "schema": "AttendanceRecord",
+      "description": "Attendance tracking sessions"
+    },
+    "/chat_messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Messages sent in FFC communication channels"
+    },
+    "/club_settings/{settingId}": {
+      "schema": "object",
+      "description": "Tactics, logo, fine rules, and system configurations"
+    }
+  }
+}
