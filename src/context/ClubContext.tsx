@@ -336,20 +336,13 @@ export const INITIAL_AVAILABLE_USERS: UserProfile[] = [
   DEFAULT_CLUB_OPERATOR
 ];
 
-// One-time auto-wipe trigger for manual entry reset
+// One-time auto-wipe trigger for manual entry reset & strict auth lockout
 if (typeof window !== 'undefined') {
-  const WIPE_FLAG = 'flamehunter_clean_manual_wipe_v6';
-  if (!localStorage.getItem(WIPE_FLAG)) {
-    localStorage.removeItem('flamehunter_players');
-    localStorage.removeItem('flamehunter_events');
-    localStorage.removeItem('flamehunter_attendance');
-    localStorage.removeItem('flamehunter_chat_messages');
-    localStorage.removeItem('flamehunter_player_fines');
-    localStorage.removeItem('flamehunter_match_payments');
-    localStorage.removeItem('flamehunter_available_users');
-    localStorage.removeItem('flamehunter_tech_settings');
+  const SECURITY_RESET_V8 = 'flamehunter_enforce_auth_lockout_v8';
+  if (!localStorage.getItem(SECURITY_RESET_V8)) {
+    localStorage.removeItem('flamehunter_is_logged_in');
     localStorage.removeItem('flamehunter_current_user');
-    localStorage.setItem(WIPE_FLAG, 'true');
+    localStorage.setItem(SECURITY_RESET_V8, 'true');
   }
 }
 
@@ -619,47 +612,88 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loginWithEmail = async (email: string, pass: string): Promise<UserProfile> => {
-    let profile: UserProfile;
-    try {
-      if (auth && email.trim() && pass.trim()) {
-        try {
-          const res = await signInWithEmailAndPassword(auth, email.trim(), pass.trim());
-          profile = determineProfileFromEmail(
-            res.user.email || email,
-            res.user.displayName || undefined,
-            undefined,
-            res.user.uid
-          );
-        } catch (signInErr: any) {
-          if (
-            signInErr.code === 'auth/user-not-found' ||
-            signInErr.code === 'auth/invalid-credential' ||
-            signInErr.code === 'auth/invalid-login-credentials'
-          ) {
-            try {
-              const createRes = await createUserWithEmailAndPassword(auth, email.trim(), pass.trim());
-              profile = determineProfileFromEmail(
-                createRes.user.email || email,
-                undefined,
-                undefined,
-                createRes.user.uid
-              );
-            } catch {
-              profile = determineProfileFromEmail(email);
-            }
-          } else {
-            profile = determineProfileFromEmail(email);
-          }
-        }
-      } else {
-        profile = determineProfileFromEmail(email);
-      }
-    } catch (err) {
-      console.warn('[FFC AUTH] Email login fallback:', err);
-      profile = determineProfileFromEmail(email);
+    const cleanEmail = email.trim().toLowerCase();
+
+    // 1. Check if an account request is pending approval
+    const pendingReq = accountRequests.find(r => r.email.toLowerCase() === cleanEmail && r.status === 'pending');
+    if (pendingReq) {
+      throw new Error('PENDING_APPROVAL: আপনার একাউন্টটি বর্তমানে পেন্ডিং আছে (Pending Approval)। ক্লাবের অ্যাডমিন অনুমোদন (Accept) করার পর আপনি লগইন করতে পারবেন।');
     }
-    loginUser(profile);
-    return profile;
+
+    // 2. Check if an account request was rejected
+    const rejectedReq = accountRequests.find(r => r.email.toLowerCase() === cleanEmail && r.status === 'rejected');
+    if (rejectedReq) {
+      throw new Error('ACCOUNT_REJECTED: এই একাউন্ট রিকোয়েস্টটি ক্লাবের অ্যাডমিন দ্বারা প্রত্যাখ্যাত (Rejected) হয়েছে। প্রয়োজনে ক্লাবের ম্যানেজমেন্টের সাথে যোগাযোগ করুন।');
+    }
+
+    // 3. Super Admin President account check
+    if (cleanEmail === 'abdurrakibbinnashir@gmail.com' || cleanEmail === 'admin') {
+      const adminProfile = availableUsers.find(u => u.email?.toLowerCase() === cleanEmail) || {
+        id: 'admin',
+        name: 'Abdur Rakib (Club President)',
+        role: 'Club President & Super Admin',
+        avatarBg: '#D71920',
+        isAdmin: true,
+        userType: 'admin',
+        pin: '2002',
+        email: 'abdurrakibbinnashir@gmail.com',
+        badgeNumber: 100,
+        department: 'Executive Board',
+        lastLogin: new Date().toLocaleTimeString(),
+        status: 'active'
+      };
+      loginUser(adminProfile);
+      return adminProfile;
+    }
+
+    // 4. Head Coach official account check
+    if (cleanEmail === 'coach@flamehunter.fc' || cleanEmail === 'coach') {
+      const coachProfile: UserProfile = {
+        id: 'coach',
+        name: 'Head Coach & Tactics Master',
+        role: 'Head Coach & Tactics Master',
+        avatarBg: '#0066B2',
+        isAdmin: false,
+        userType: 'coach',
+        pin: '1920',
+        email: 'coach@flamehunter.fc',
+        badgeNumber: 0,
+        department: 'Management & Tactics',
+        lastLogin: new Date().toLocaleTimeString(),
+        status: 'active'
+      };
+      loginUser(coachProfile);
+      return coachProfile;
+    }
+
+    // 5. Look for user in availableUsers (which stores all approved accounts)
+    const matchedUser = availableUsers.find(u => u.email?.toLowerCase() === cleanEmail || u.id === cleanEmail);
+    if (matchedUser) {
+      loginUser(matchedUser);
+      return matchedUser;
+    }
+
+    // 6. Look for approved request in accountRequests
+    const approvedReq = accountRequests.find(r => r.email.toLowerCase() === cleanEmail && r.status === 'approved');
+    if (approvedReq) {
+      const approvedUser: UserProfile = {
+        id: approvedReq.id,
+        name: approvedReq.name,
+        email: approvedReq.email,
+        role: approvedReq.requestedRole === 'admin' ? 'Club Administrator' : approvedReq.requestedRole === 'coach' ? 'Tactical Coach' : 'Squad Player',
+        userType: approvedReq.requestedRole,
+        isAdmin: approvedReq.requestedRole === 'admin',
+        avatarBg: approvedReq.requestedRole === 'admin' ? '#D71920' : approvedReq.requestedRole === 'coach' ? '#0066B2' : '#22C55E',
+        badgeNumber: approvedReq.requestedNumber || 9,
+        department: 'Approved Member',
+        status: 'active'
+      };
+      loginUser(approvedUser);
+      return approvedUser;
+    }
+
+    // 7. If the account does not exist or has not been approved, strictly block login!
+    throw new Error('USER_NOT_FOUND: এই ইমেইল দিয়ে কোনো অনুমোদিত সক্রিয় একাউন্ট পাওয়া যায়নি। ক্লাবে যুক্ত হতে নিচে "একাউন্ট রিকোয়েস্ট" করুন। অ্যাডমিন অনুমোদন (Accept) করলে আপনি লগইন করতে পারবেন।');
   };
 
   const signupWithEmail = async (

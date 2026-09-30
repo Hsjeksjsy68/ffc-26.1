@@ -1,7 +1,7 @@
 import React from 'react';
 import { useClub } from '../context/ClubContext';
 import { FlamehunterLogo } from './FlamehunterLogo';
-import { Flame, Trophy, Calendar, MessageSquare, CheckSquare, ShieldAlert, Users, RotateCcw, Sparkles, Database, Radio, Zap, Smartphone, Bell, Activity, LogIn, User, Shield, ClipboardList } from 'lucide-react';
+import { Flame, Trophy, Calendar, MessageSquare, CheckSquare, ShieldAlert, Users, RotateCcw, Sparkles, Database, Radio, Zap, Smartphone, Bell, Activity, LogIn, LogOut, User, Shield, ClipboardList } from 'lucide-react';
 
 interface HeaderProps {
   activeTab: 'stats' | 'schedules' | 'chat' | 'attendance' | 'admin' | 'realtime';
@@ -12,6 +12,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
   const {
     currentUser,
     openLoginPanel,
+    logoutUser,
     getTeamAttendanceRate,
     players,
     events,
@@ -81,6 +82,17 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
             }`}>
               {currentUser.userType === 'admin' ? 'ADMIN' : currentUser.userType === 'coach' ? 'COACH' : 'PLAYER'}
             </span>
+          </button>
+
+          {/* Direct Mobile Logout Button */}
+          <button
+            type="button"
+            onClick={logoutUser}
+            className="bg-[#D71920] hover:bg-red-700 text-white border-2 border-black px-2 py-1 text-[9px] font-black uppercase shadow-[1px_1px_0px_0px_#000] flex items-center gap-1 cursor-pointer active:scale-95"
+            title="Log out and return to Login Screen"
+          >
+            <LogOut className="w-3 h-3" />
+            <span className="hidden xs:inline">LOGOUT</span>
           </button>
         </div>
       </div>
@@ -232,17 +244,27 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
               </div>
             </div>
 
-            {/* Single Login Box Button */}
+            {/* Switch Role Button */}
             <button
               id="header-open-login-box-btn"
               type="button"
               onClick={openLoginPanel}
-              title="Open single login box for Admin, Coach, or Player"
-              className="bg-[#FFE600] hover:bg-yellow-300 text-black border-3 border-black px-3 py-2 text-xs font-black uppercase shadow-[4px_4px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center gap-1.5 cursor-pointer"
+              title="Open switch role dialog"
+              className="bg-[#FFE600] hover:bg-yellow-300 text-black border-3 border-black px-2.5 py-1.5 text-xs font-black uppercase shadow-[3px_3px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center gap-1.5 cursor-pointer"
             >
-              <LogIn className="w-4 h-4 text-black" />
-              <span className="hidden sm:inline">LOGIN /</span>
+              <LogIn className="w-3.5 h-3.5 text-black" />
               <span>SWITCH ROLE</span>
+            </button>
+
+            {/* Direct Logout Button */}
+            <button
+              type="button"
+              onClick={logoutUser}
+              title="Log out from account and lock portal"
+              className="bg-[#D71920] hover:bg-red-700 text-white border-3 border-black px-3 py-1.5 text-xs font-black uppercase shadow-[3px_3px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5 text-white" />
+              <span>LOGOUT (লগআউট)</span>
             </button>
           </div>
         </div>

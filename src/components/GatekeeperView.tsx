@@ -93,55 +93,6 @@ export const GatekeeperView: React.FC = () => {
     }
   };
 
-  // Quick Preset Role Login
-  const handleQuickPresetLogin = (role: 'admin' | 'coach' | 'player') => {
-    if (role === 'admin') {
-      loginUser({
-        id: 'admin',
-        name: 'Abdur Rakib (Club President)',
-        role: 'Club President & Super Admin',
-        avatarBg: '#D71920',
-        isAdmin: true,
-        userType: 'admin',
-        pin: '2002',
-        email: 'abdurrakibbinnashir@gmail.com',
-        badgeNumber: 100,
-        department: 'Executive Board',
-        lastLogin: 'Active now'
-      });
-    } else if (role === 'coach') {
-      loginUser({
-        id: 'coach',
-        name: 'Head Coach & Tactics Master',
-        role: 'Head Coach & Tactics Master',
-        avatarBg: '#0066B2',
-        isAdmin: false,
-        userType: 'coach',
-        pin: '1920',
-        email: 'coach@flamehunter.fc',
-        badgeNumber: 0,
-        department: 'Management & Tactics',
-        lastLogin: 'Active now'
-      });
-    } else {
-      const topP = players[0];
-      loginUser({
-        id: topP ? topP.id : 'player_1',
-        name: topP ? topP.name : 'Marcus Vance',
-        role: `First Team (${topP ? topP.position : 'FWD'})`,
-        avatarBg: topP ? topP.avatarBg : '#22C55E',
-        isAdmin: false,
-        userType: 'player',
-        pin: '1234',
-        email: 'player@flamehunter.fc',
-        badgeNumber: topP ? topP.number : 10,
-        department: 'Squad Roster',
-        linkedPlayerId: topP?.id,
-        lastLogin: 'Active now'
-      });
-    }
-  };
-
   // Handle Account Creation Request Submit
   const handleRequestSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -313,46 +264,49 @@ export const GatekeeperView: React.FC = () => {
               </button>
             </form>
 
-            <div className="relative my-4 text-center">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-black/20" />
-              </div>
-              <span className="relative bg-white px-2 text-[10px] font-black uppercase text-neutral-400">
-                অথবা টেস্ট রোলে লগইন করুন
-              </span>
+            <div className="pt-2 text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('request');
+                  setRequestErrorMsg(null);
+                  setRequestSuccessMsg(null);
+                }}
+                className="text-xs font-black uppercase text-[#0084FF] hover:underline cursor-pointer"
+              >
+                একাউন্ট নেই? নতুন একাউন্ট রিকোয়েস্ট পাঠান ↵
+              </button>
             </div>
 
-            {/* Quick Preset Logins */}
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickPresetLogin('admin')}
-                className="bg-[#FFE600] hover:bg-yellow-300 text-black border-2 border-black p-2 text-center shadow-[2px_2px_0px_0px_#000] active:scale-95 transition-transform cursor-pointer"
-              >
-                <Shield className="w-4 h-4 mx-auto text-[#D71920] mb-0.5" />
-                <span className="text-[10px] font-black uppercase block leading-tight">প্রেসিডেন্ট</span>
-                <span className="text-[8px] font-bold text-neutral-600 uppercase block">ADMIN</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickPresetLogin('coach')}
-                className="bg-white hover:bg-blue-50 text-black border-2 border-black p-2 text-center shadow-[2px_2px_0px_0px_#000] active:scale-95 transition-transform cursor-pointer"
-              >
-                <UserCheck className="w-4 h-4 mx-auto text-[#0066B2] mb-0.5" />
-                <span className="text-[10px] font-black uppercase block leading-tight">হেড কোচ</span>
-                <span className="text-[8px] font-bold text-neutral-600 uppercase block">COACH</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickPresetLogin('player')}
-                className="bg-white hover:bg-green-50 text-black border-2 border-black p-2 text-center shadow-[2px_2px_0px_0px_#000] active:scale-95 transition-transform cursor-pointer"
-              >
-                <span className="text-xs font-black block leading-tight text-[#22C55E]">#10</span>
-                <span className="text-[10px] font-black uppercase block leading-tight">প্লেয়ার</span>
-                <span className="text-[8px] font-bold text-neutral-600 uppercase block">PLAYER</span>
-              </button>
+            {/* Quick Fill Credentials Helper (Fills fields only, requires real submission) */}
+            <div className="pt-3 border-t-2 border-black/10">
+              <span className="text-[10px] font-black uppercase text-neutral-500 block mb-1.5 text-center">
+                অ্যাডমিন টেস্ট ক্রেডেনশিয়াল পূরণ করুন:
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoginEmail('abdurrakibbinnashir@gmail.com');
+                    setLoginPassword('2002');
+                    setLoginError(null);
+                  }}
+                  className="flex-1 bg-[#FFFEEA] hover:bg-[#FFE600] text-black border border-black py-1.5 px-2 text-[10px] font-black uppercase text-center cursor-pointer transition-colors"
+                >
+                  🛡️ Admin: abdurrakib... (Pin: 2002)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoginEmail('coach@flamehunter.fc');
+                    setLoginPassword('1920');
+                    setLoginError(null);
+                  }}
+                  className="flex-1 bg-[#F0FDF4] hover:bg-[#22C55E] text-black border border-black py-1.5 px-2 text-[10px] font-black uppercase text-center cursor-pointer transition-colors"
+                >
+                  📋 Coach: coach@flame... (Pin: 1920)
+                </button>
+              </div>
             </div>
           </div>
         )}
