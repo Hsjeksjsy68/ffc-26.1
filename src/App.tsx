@@ -68,17 +68,17 @@ const MainContent: React.FC = () => {
     return <GatekeeperView />;
   }
 
-  // Dedicated Full-Page Chat View (Separate Messenger Page)
+  // Dedicated Full-Page Chat View (Separate Messenger Page - 100% Viewport Fit)
   if (activeTab === 'chat') {
     return (
-      <div className="min-h-screen bg-[#F0F2F5] text-black flex flex-col justify-between selection:bg-[#FFE600] relative">
+      <div className="h-[100dvh] max-h-[100dvh] w-full bg-[#F0F2F5] text-black flex flex-col overflow-hidden selection:bg-[#FFE600] fixed inset-0 z-40">
         {/* Dedicated Chat Page Header */}
-        <div className="bg-[#0084FF] text-white border-b-3 border-black px-3 sm:px-6 py-2.5 flex items-center justify-between sticky top-0 z-30 shadow-[0_2px_10px_rgba(0,0,0,0.1)]">
+        <div className="shrink-0 bg-[#0084FF] text-white border-b-2 sm:border-b-3 border-black px-2.5 sm:px-6 py-2 flex items-center justify-between z-30 shadow-[0_2px_10px_rgba(0,0,0,0.1)]">
           <div className="flex items-center gap-2 sm:gap-3">
             <button
               type="button"
               onClick={() => handleTabChange('stats')}
-              className="bg-white hover:bg-[#FFE600] text-black border-2 border-black px-3 py-1.5 text-xs font-black uppercase shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center gap-1 cursor-pointer"
+              className="bg-white hover:bg-[#FFE600] text-black border-2 border-black px-2.5 py-1 text-xs font-black uppercase shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center gap-1 cursor-pointer"
               title="Return to Club Hub"
             >
               <span>← CLUB HUB (ক্লাব পেজ)</span>
@@ -86,25 +86,25 @@ const MainContent: React.FC = () => {
             <div className="flex items-center gap-2">
               <FlamehunterLogo size="xs" withShadow />
               <div>
-                <h1 className="text-sm sm:text-base font-black uppercase text-white leading-none">
+                <h1 className="text-xs sm:text-base font-black uppercase text-white leading-none">
                   FLAMEHUNTER MESSENGER
                 </h1>
-                <span className="text-[10px] font-bold text-blue-100 uppercase hidden sm:inline">
-                  DEDICATED SQUAD COMMUNICATIONS PAGE
+                <span className="text-[10px] font-bold text-blue-100 uppercase hidden md:inline">
+                  OFFICIAL SQUAD CHAT ROOM
                 </span>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="hidden sm:flex items-center gap-1.5 bg-black text-[#FFE600] px-2.5 py-1 border border-black text-xs font-black uppercase">
+            <div className="flex items-center gap-1.5 bg-black text-[#FFE600] px-2 py-1 border border-black text-xs font-black uppercase">
               <div
                 className="w-4 h-4 rounded-full border border-black flex items-center justify-center font-black text-[9px] text-white"
                 style={{ backgroundColor: currentUser.avatarBg || '#D71920' }}
               >
                 {currentUser.name.charAt(0)}
               </div>
-              <span>{currentUser.name} ({currentUser.userType?.toUpperCase() || 'PLAYER'})</span>
+              <span className="truncate max-w-[80px] sm:max-w-[150px]">{currentUser.name}</span>
             </div>
 
             <button
@@ -118,13 +118,10 @@ const MainContent: React.FC = () => {
           </div>
         </div>
 
-        {/* Dedicated Full Page Chat Body */}
-        <main className="flex-1 w-full max-w-7xl mx-auto px-2 sm:px-4 py-3 sm:py-4 pb-24 md:pb-6">
-          <ChatAndGroupsView />
+        {/* Dedicated Full Page Chat Body - 100% of remaining viewport height */}
+        <main className="flex-1 min-h-0 w-full max-w-7xl mx-auto p-0 sm:p-2 sm:pb-3 overflow-hidden flex flex-col">
+          <ChatAndGroupsView isDedicatedPage={true} onBackToHub={() => handleTabChange('stats')} />
         </main>
-
-        {/* Mobile Bottom Navigation */}
-        <MobileBottomNav activeTab={activeTab} setActiveTab={handleTabChange} />
 
         {/* Global Modals */}
         <PhoneNotificationModal

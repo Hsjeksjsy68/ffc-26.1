@@ -32,7 +32,12 @@ import {
   Volume2
 } from 'lucide-react';
 
-export const ChatAndGroupsView: React.FC = () => {
+export interface ChatAndGroupsViewProps {
+  isDedicatedPage?: boolean;
+  onBackToHub?: () => void;
+}
+
+export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicatedPage = false, onBackToHub }) => {
   const {
     chatGroups,
     chatMessages,
@@ -180,45 +185,51 @@ export const ChatAndGroupsView: React.FC = () => {
   );
 
   return (
-    <div className="bg-white border-3 sm:border-4 border-black shadow-[4px_4px_0px_0px_#000] sm:shadow-[6px_6px_0px_0px_#000] overflow-hidden">
-      {/* Top Messenger App Header Banner */}
-      <div className="bg-[#0084FF] text-white px-3 sm:px-4 py-2 border-b-3 border-black flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-white text-[#0084FF] rounded-full flex items-center justify-center font-black shadow-[1px_1px_0px_0px_#000]">
-            <MessageSquare className="w-4 h-4" />
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-black text-sm uppercase tracking-tight text-white">
-                FLAMEHUNTER MESSENGER
-              </span>
-              <span className="bg-[#FFE600] text-black text-[9px] font-black px-1.5 py-0.2 border border-black uppercase">
-                ACTIVE
-              </span>
+    <div className={`w-full flex flex-col bg-white overflow-hidden ${
+      isDedicatedPage
+        ? 'h-full flex-1 min-h-0 border-0 sm:border-3 sm:border-black sm:shadow-[4px_4px_0px_0px_#000]'
+        : 'h-[calc(100vh-210px)] min-h-[480px] max-h-[800px] border-3 sm:border-4 border-black shadow-[4px_4px_0px_0px_#000] sm:shadow-[6px_6px_0px_0px_#000]'
+    }`}>
+      {/* Top Messenger App Header Banner (Shown only inside regular hub tabs) */}
+      {!isDedicatedPage && (
+        <div className="shrink-0 bg-[#0084FF] text-white px-3 sm:px-4 py-2 border-b-3 border-black flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 bg-white text-[#0084FF] rounded-full flex items-center justify-center font-black shadow-[1px_1px_0px_0px_#000]">
+              <MessageSquare className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-black text-sm uppercase tracking-tight text-white">
+                  FLAMEHUNTER MESSENGER
+                </span>
+                <span className="bg-[#FFE600] text-black text-[9px] font-black px-1.5 py-0.2 border border-black uppercase">
+                  ACTIVE
+                </span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={openNotificationModal}
-            className="flex items-center gap-1 text-[11px] bg-white hover:bg-[#FFE600] text-black border-2 border-black px-2.5 py-1 font-black shadow-[1px_1px_0px_0px_#000] cursor-pointer"
-            title="Configure notifications to your phone"
-          >
-            <Smartphone className="w-3.5 h-3.5 text-[#22C55E]" />
-            <span className="hidden sm:inline">PHONE ALERTS</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={openNotificationModal}
+              className="flex items-center gap-1 text-[11px] bg-white hover:bg-[#FFE600] text-black border-2 border-black px-2.5 py-1 font-black shadow-[1px_1px_0px_0px_#000] cursor-pointer"
+              title="Configure notifications to your phone"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-[#22C55E]" />
+              <span className="hidden sm:inline">PHONE ALERTS</span>
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main Messenger Grid: Sidebar + Active Chat */}
-      <div className="grid grid-cols-1 md:grid-cols-12 h-[calc(100vh-220px)] min-h-[580px] max-h-[820px]">
+      <div className="flex-1 min-h-0 h-full grid grid-cols-1 md:grid-cols-12 overflow-hidden">
         {/* ========================================================
             LEFT COLUMN: CHATS LIST & ACTIVE NOW (MESSENGER SIDEBAR)
            ======================================================== */}
         <div
-          className={`md:col-span-4 lg:col-span-4 border-r-3 border-black flex flex-col bg-white ${
+          className={`md:col-span-4 lg:col-span-4 border-r-0 md:border-r-3 border-black h-full flex flex-col bg-white overflow-hidden ${
             mobileView === 'chat' ? 'hidden md:flex' : 'flex'
           }`}
         >
@@ -309,7 +320,7 @@ export const ChatAndGroupsView: React.FC = () => {
           </div>
 
           {/* Conversation List (Messenger Threads) */}
-          <div className="flex-1 overflow-y-auto divide-y divide-neutral-100">
+          <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-neutral-100">
             {filteredGroups.length === 0 ? (
               <div className="p-6 text-center text-neutral-500 text-xs font-bold uppercase">
                 No chats found matching "{searchQuery}"
@@ -393,12 +404,12 @@ export const ChatAndGroupsView: React.FC = () => {
             RIGHT COLUMN: ACTIVE CHAT CONVERSATION (MESSENGER ROOM)
            ======================================================== */}
         <div
-          className={`md:col-span-8 lg:col-span-8 flex flex-col bg-[#F0F2F5] ${
+          className={`md:col-span-8 lg:col-span-8 flex flex-col bg-[#F0F2F5] h-full overflow-hidden ${
             mobileView === 'list' ? 'hidden md:flex' : 'flex'
           }`}
         >
           {/* Active Conversation Top Bar (Messenger Header) */}
-          <div className="bg-white border-b-3 border-black px-3.5 py-2.5 flex items-center justify-between shadow-[0_2px_4px_rgba(0,0,0,0.04)] z-10">
+          <div className="shrink-0 bg-white border-b-2 sm:border-b-3 border-black px-3 sm:px-3.5 py-2 sm:py-2.5 flex items-center justify-between shadow-[0_2px_4px_rgba(0,0,0,0.04)] z-10">
             <div className="flex items-center gap-2.5">
               {/* Back button on mobile */}
               <button
@@ -520,7 +531,7 @@ export const ChatAndGroupsView: React.FC = () => {
           {/* ========================================================
               MESSAGES STREAM (AUTHENTIC MESSENGER BUBBLES)
              ======================================================== */}
-          <div className="flex-1 p-3 sm:p-4 overflow-y-auto space-y-3">
+          <div className="flex-1 min-h-0 p-3 sm:p-4 overflow-y-auto space-y-3">
             {activeMessages.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center p-6">
                 <div className="w-16 h-16 rounded-full bg-[#EBF5FF] border-2 border-black flex items-center justify-center text-[#0084FF] mb-3 shadow-[3px_3px_0px_0px_#000]">
@@ -736,7 +747,7 @@ export const ChatAndGroupsView: React.FC = () => {
           {/* ========================================================
               MESSENGER BOTTOM INPUT BAR (STICKY, PILL-SHAPED)
              ======================================================== */}
-          <div className="bg-white border-t-3 border-black p-2.5 sm:p-3">
+          <div className="shrink-0 bg-white border-t-2 sm:border-t-3 border-black p-2 sm:p-2.5">
             <form
               onSubmit={e => {
                 e.preventDefault();
