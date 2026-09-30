@@ -29,7 +29,11 @@ import {
   ChevronLeft,
   Sparkles,
   MoreVertical,
-  Volume2
+  Volume2,
+  Trash2,
+  RotateCcw,
+  Lock,
+  ShieldAlert
 } from 'lucide-react';
 
 export interface ChatAndGroupsViewProps {
@@ -42,6 +46,9 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
     chatGroups,
     chatMessages,
     createChatGroup,
+    deleteChatGroup,
+    resetAllChats,
+    clearGroupMessages,
     sendChatMessage,
     reactToMessage,
     players,
@@ -60,6 +67,11 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
   const [showGroupDetails, setShowGroupDetails] = useState(false);
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
   const [callModalType, setCallModalType] = useState<'audio' | 'video' | null>(null);
+
+  // Deletion & Reset Modal States
+  const [deleteConfirmGroup, setDeleteConfirmGroup] = useState<ChatGroup | null>(null);
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  const [actionNotice, setActionNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Mobile state: 'list' (shows conversations list) vs 'chat' (shows active thread)
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('chat');
@@ -117,6 +129,46 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
   // Quick Photo Simulation
   const handleSendPhoto = () => {
     handleSendMessage(`📸 [Matchday Photo] Squad pitch setup and formation chalkboard ready! ⚽`);
+  };
+
+  // Handle Group Deletion Execution
+  const handleExecuteDeleteGroup = async () => {
+    if (!deleteConfirmGroup) return;
+    const res = await deleteChatGroup(deleteConfirmGroup.id);
+    if (res.success) {
+      setActionNotice({ type: 'success', text: res.message });
+      if (activeGroupId === deleteConfirmGroup.id) {
+        const remaining = chatGroups.filter(g => g.id !== deleteConfirmGroup.id);
+        if (remaining.length > 0) {
+          setActiveGroupId(remaining[0].id);
+        }
+      }
+    } else {
+      setActionNotice({ type: 'error', text: res.message });
+    }
+    setDeleteConfirmGroup(null);
+  };
+
+  // Handle Reset All Chats Execution
+  const handleExecuteResetAllChats = async () => {
+    const res = await resetAllChats();
+    if (res.success) {
+      setActionNotice({ type: 'success', text: res.message });
+      setActiveGroupId('grp-1');
+    } else {
+      setActionNotice({ type: 'error', text: res.message });
+    }
+    setIsResetConfirmOpen(false);
+  };
+
+  // Handle Clear Message History Execution
+  const handleExecuteClearMessages = async (groupId: string) => {
+    const res = await clearGroupMessages(groupId);
+    if (res.success) {
+      setActionNotice({ type: 'success', text: res.message });
+    } else {
+      setActionNotice({ type: 'error', text: res.message });
+    }
   };
 
   // Create Group Submit
@@ -250,14 +302,27 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsCreatingGroup(true)}
-              className="w-8 h-8 bg-[#22C55E] hover:bg-green-500 text-black border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer"
-              title="Create New Squad Group"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1.5">
+              {currentUser.isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setIsResetConfirmOpen(true)}
+                  className="bg-[#FFF1F2] hover:bg-[#D71920] hover:text-white text-[#D71920] border-2 border-black px-2 py-1 text-[10px] font-black uppercase shadow-[1px_1px_0px_0px_#000] active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
+                  title="Admin: Reset all chats and messages"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span className="hidden sm:inline">RESET</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setIsCreatingGroup(true)}
+                className="w-8 h-8 bg-[#22C55E] hover:bg-green-500 text-black border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer"
+                title="Create New Squad Group"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           {/* Messenger Search Bar */}
@@ -328,6 +393,8 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
             ) : (
               filteredGroups.map(group => {
                 const isActive = group.id === activeGroupId;
+                const isProtected = group.isAdminGroup || group.isChannel || group.createdBy === 'admin' || group.createdBy === 'flamehunter_staff';
+                const canDelete = currentUser.isAdmin || (!isProtected && (group.createdBy === currentUser.id || group.createdBy === currentUser.email));
                 const lastMsg = chatMessages
                   .filter(m => m.groupId === group.id)
                   .slice(-1)[0];
@@ -377,7 +444,7 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
                       </div>
 
                       <div className="flex items-center justify-between">
-                        <p className="text-[11px] font-bold text-neutral-600 truncate max-w-[180px]">
+                        <p className="text-[11px] font-bold text-neutral-600 truncate max-w-[150px]">
                           {lastMsg ? (
                             <span>
                               {lastMsg.senderName.split(' ')[0]}: {lastMsg.text}
@@ -386,11 +453,33 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
                             <span className="italic text-neutral-400">No messages yet</span>
                           )}
                         </p>
-                        {group.isChannel && (
-                          <span className="bg-[#FFE600] text-black text-[8px] font-black px-1 py-0.2 border border-black uppercase ml-1 shrink-0">
-                            SQUAD
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1 shrink-0 ml-1">
+                          {group.isChannel && (
+                            <span className="bg-[#FFE600] text-black text-[8px] font-black px-1 py-0.2 border border-black uppercase shrink-0">
+                              SQUAD
+                            </span>
+                          )}
+                          {isProtected ? (
+                            <span
+                              title="অফিশিয়াল অ্যাডমিন চ্যানেল • সুরক্ষিত"
+                              className="flex items-center gap-0.5 bg-neutral-200 text-neutral-600 text-[8px] font-black px-1 py-0.5 border border-neutral-300 uppercase shrink-0"
+                            >
+                              <Lock className="w-2.5 h-2.5 text-[#D71920]" />
+                            </span>
+                          ) : canDelete ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteConfirmGroup(group);
+                              }}
+                              className="p-1 text-neutral-400 hover:text-[#D71920] hover:bg-white border border-transparent hover:border-black rounded transition-colors cursor-pointer shrink-0"
+                              title="Delete this group"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                   </button>
@@ -491,6 +580,36 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
               >
                 <Info className="w-4 h-4" />
               </button>
+
+              {/* Delete Group Button if user is allowed (or locked indicator if admin group) */}
+              {(() => {
+                const isActiveProtected = activeGroup.isAdminGroup || activeGroup.isChannel || activeGroup.createdBy === 'admin' || activeGroup.createdBy === 'flamehunter_staff';
+                const canDeleteActive = currentUser.isAdmin || (!isActiveProtected && (activeGroup.createdBy === currentUser.id || activeGroup.createdBy === currentUser.email));
+
+                if (canDeleteActive) {
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirmGroup(activeGroup)}
+                      className="w-8 h-8 rounded-full bg-[#FFF1F2] hover:bg-[#D71920] hover:text-white text-[#D71920] border-2 border-black flex items-center justify-center transition-all cursor-pointer shadow-[1px_1px_0px_0px_#000]"
+                      title="Delete this group"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  );
+                } else if (isActiveProtected) {
+                  return (
+                    <span
+                      className="hidden sm:flex items-center gap-1 bg-neutral-100 text-neutral-600 border border-neutral-400 px-2 py-1 text-[9px] font-black uppercase rounded shadow-[1px_1px_0px_0px_#000]"
+                      title="Official Admin Channel • Protected from deletion"
+                    >
+                      <Lock className="w-3 h-3 text-[#D71920]" />
+                      <span>OFFICIAL</span>
+                    </span>
+                  );
+                }
+                return null;
+              })()}
             </div>
           </div>
 
@@ -524,6 +643,38 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
                     </span>
                   );
                 })}
+              </div>
+
+              {/* Creator & Admin Status */}
+              <div className="mt-3 pt-2 border-t border-black/10 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[10px] text-neutral-600">
+                  {activeGroup.isAdminGroup ? '🛡️ তৈরি করেছেন: ক্লাবের অফিশিয়াল অ্যাডমিন (Official)' : `👤 তৈরি করেছেন: ${activeGroup.createdByName || 'ক্লাব মেম্বার'}`}
+                </span>
+                <div className="flex items-center gap-2">
+                  {(currentUser.isAdmin || activeGroup.createdBy === currentUser.id) && (
+                    <button
+                      type="button"
+                      onClick={() => handleExecuteClearMessages(activeGroup.id)}
+                      className="bg-white hover:bg-neutral-100 text-black border border-black px-2 py-1 text-[10px] font-bold uppercase cursor-pointer"
+                    >
+                      🧹 Clear Messages
+                    </button>
+                  )}
+                  {(() => {
+                    const isActiveProtected = activeGroup.isAdminGroup || activeGroup.isChannel || activeGroup.createdBy === 'admin' || activeGroup.createdBy === 'flamehunter_staff';
+                    const canDeleteActive = currentUser.isAdmin || (!isActiveProtected && (activeGroup.createdBy === currentUser.id || activeGroup.createdBy === currentUser.email));
+                    return canDeleteActive ? (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirmGroup(activeGroup)}
+                        className="bg-[#FFF1F2] hover:bg-[#D71920] hover:text-white text-[#D71920] border border-black px-2 py-1 text-[10px] font-bold uppercase cursor-pointer flex items-center gap-1"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Delete Group</span>
+                      </button>
+                    ) : null;
+                  })()}
+                </div>
               </div>
             </div>
           )}
@@ -946,6 +1097,110 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Group Confirmation Modal */}
+      {deleteConfirmGroup && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white border-4 border-black p-5 sm:p-6 max-w-md w-full shadow-[8px_8px_0px_0px_#000]">
+            <div className="flex items-center gap-2 text-[#D71920] mb-3">
+              <Trash2 className="w-6 h-6 shrink-0" />
+              <h3 className="font-black text-base uppercase text-black">
+                গ্রুপ ডিলিট নিশ্চিতকরণ (DELETE GROUP)
+              </h3>
+            </div>
+
+            <p className="text-xs sm:text-sm font-bold text-neutral-700 leading-relaxed mb-4">
+              আপনি কি নিশ্চিত যে আপনি <span className="text-[#D71920] font-black">"{deleteConfirmGroup.name}"</span> গ্রুপটি চিরতরে মুছে ফেলতে চান?
+              <br />
+              <span className="text-[11px] text-neutral-500 mt-1 block">
+                ⚠️ এই গ্রুপের সমস্ত মেসেজ ও মিডিয়া হিস্ট্রি স্থায়ীভাবে ডিলিট হয়ে যাবে।
+              </span>
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t-2 border-black/10">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmGroup(null)}
+                className="px-4 py-2 border-2 border-black text-xs font-black uppercase hover:bg-neutral-100 cursor-pointer"
+              >
+                বাতিল (CANCEL)
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteDeleteGroup}
+                className="px-4 py-2 bg-[#D71920] hover:bg-red-700 text-white border-2 border-black text-xs font-black uppercase shadow-[2px_2px_0px_0px_#000] active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>হ্যাঁ, ডিলিট করুন (DELETE)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset All Chats Confirmation Modal (Admin Only) */}
+      {isResetConfirmOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white border-4 border-black p-5 sm:p-6 max-w-md w-full shadow-[8px_8px_0px_0px_#000]">
+            <div className="flex items-center gap-2 text-[#D71920] mb-3">
+              <RotateCcw className="w-6 h-6 shrink-0" />
+              <h3 className="font-black text-base uppercase text-black">
+                সব চ্যাট রিসেট (RESET ALL CHATS)
+              </h3>
+            </div>
+
+            <div className="bg-[#FFF1F2] border-2 border-[#D71920] p-3 text-xs font-bold text-[#D71920] mb-4 space-y-1">
+              <div className="flex items-center gap-1.5 font-black uppercase">
+                <ShieldAlert className="w-4 h-4" />
+                <span>সতর্কতা: ক্লাবের সম্পূর্ণ চ্যাট মুছে যাবে</span>
+              </div>
+              <p className="text-[11px] leading-relaxed">
+                এটি ক্লাবের মেম্বারদের তৈরি সব কাস্টম গ্রুপ এবং সমস্ত চ্যাট মেসেজ হিস্ট্রি মুছে দিয়ে ৩টি অফিশিয়াল ক্লাব চ্যানেলকে ফ্যাক্টরি ডিফল্ট অবস্থায় ফিরিয়ে আনবে।
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t-2 border-black/10">
+              <button
+                type="button"
+                onClick={() => setIsResetConfirmOpen(false)}
+                className="px-4 py-2 border-2 border-black text-xs font-black uppercase hover:bg-neutral-100 cursor-pointer"
+              >
+                বাতিল (CANCEL)
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteResetAllChats}
+                className="px-4 py-2 bg-[#D71920] hover:bg-red-700 text-white border-2 border-black text-xs font-black uppercase shadow-[2px_2px_0px_0px_#000] active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>হ্যাঁ, সব রিসেট করুন (RESET ALL)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Action Notice Toast */}
+      {actionNotice && (
+        <div className="fixed bottom-5 right-5 z-50 animate-bounce-short">
+          <div
+            className={`border-3 border-black p-3.5 text-xs font-black uppercase shadow-[4px_4px_0px_0px_#000] flex items-center gap-2 ${
+              actionNotice.type === 'success'
+                ? 'bg-[#22C55E] text-black'
+                : 'bg-[#D71920] text-white'
+            }`}
+          >
+            <span>{actionNotice.text}</span>
+            <button
+              type="button"
+              onClick={() => setActionNotice(null)}
+              className="ml-2 bg-black text-white hover:bg-neutral-800 w-5 h-5 flex items-center justify-center text-xs font-black cursor-pointer"
+            >
+              ✕
+            </button>
           </div>
         </div>
       )}

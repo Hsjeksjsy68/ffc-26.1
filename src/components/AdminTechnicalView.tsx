@@ -1749,6 +1749,11 @@ export const AdminTechnicalView: React.FC = () => {
                         }`}>
                           {req.requestedRole === 'admin' ? '🛡️ ADMIN REQUEST' : req.requestedRole === 'coach' ? '📋 COACH REQUEST' : '⚽ PLAYER REQUEST'}
                         </span>
+                        {req.isGoogleVerified && (
+                          <span className="bg-[#4285F4] text-white text-[9px] font-black px-1.5 py-0.5 border border-black uppercase flex items-center gap-1">
+                            <span>✓ GOOGLE VERIFIED</span>
+                          </span>
+                        )}
                         <span className="text-[10px] font-bold text-neutral-500 bg-white px-2 py-0.5 border border-black uppercase">
                           {req.submittedAt}
                         </span>

@@ -112,6 +112,16 @@ interface ClubContextType {
     requestedNumber?: number;
     notes?: string;
   }) => Promise<{ success: boolean; message: string }>;
+  requestAccountWithGoogle: (
+    requestedRole?: 'player' | 'coach' | 'admin',
+    requestedPosition?: Position,
+    requestedNumber?: number
+  ) => Promise<{
+    success: boolean;
+    message: string;
+    googleProfile?: { name: string; email: string; photoURL?: string };
+    isAlreadyApprovedOrAdmin?: boolean;
+  }>;
   approveAccountRequest: (requestId: string, linkPlayerId?: string) => Promise<void>;
   rejectAccountRequest: (requestId: string, reason?: string) => Promise<void>;
   deleteAccountRequest: (requestId: string) => Promise<void>;
@@ -187,6 +197,9 @@ interface ClubContextType {
   chatGroups: ChatGroup[];
   chatMessages: ChatMessage[];
   createChatGroup: (name: string, description: string, memberIds: string[], icon: string, accentColor: string) => ChatGroup;
+  deleteChatGroup: (groupId: string) => Promise<{ success: boolean; message: string }>;
+  resetAllChats: () => Promise<{ success: boolean; message: string }>;
+  clearGroupMessages: (groupId: string) => Promise<{ success: boolean; message: string }>;
   sendChatMessage: (groupId: string, text: string, options?: { isAnnouncement?: boolean; tacticalTag?: string }) => void;
   reactToMessage: (messageId: string, emoji: string) => void;
 
@@ -251,22 +264,17 @@ export function determineProfileFromEmail(
 ): UserProfile {
   const norm = (email || '').trim().toLowerCase();
 
-  // 1. Super Admin: match president email abdurrakibbinnashir@gmail.com or contains admin/president
-  if (
-    norm === 'abdurrakibbinnashir@gmail.com' ||
-    norm.includes('admin') ||
-    norm.includes('president') ||
-    norm.includes('rakib')
-  ) {
+  // 1. Super Admin: strictly match president email wwwrakibcom071@gmail.com
+  if (norm === 'wwwrakibcom071@gmail.com') {
     return {
-      id: uid || 'admin',
+      id: uid || 'admin_rakib',
       name: displayName || 'Abdur Rakib (Club President)',
       role: 'Club President & Super Admin',
       avatarBg: '#D71920',
       isAdmin: true,
       userType: 'admin',
-      pin: '2002',
-      email: email.trim() || 'abdurrakibbinnashir@gmail.com',
+      pin: 'takebarm#',
+      email: 'wwwrakibcom071@gmail.com',
       badgeNumber: 100,
       department: 'Executive Board',
       lastLogin: new Date().toLocaleTimeString(),
@@ -276,44 +284,19 @@ export function determineProfileFromEmail(
     };
   }
 
-  // 2. Coach: contains coach / manager / tactics
-  if (
-    norm.includes('coach') ||
-    norm.includes('tactics') ||
-    norm.includes('trainer') ||
-    norm.includes('manager')
-  ) {
-    return {
-      id: uid || 'coach',
-      name: displayName || 'Head Coach & Tactics Master',
-      role: 'Head Coach & Tactics Master',
-      avatarBg: '#0066B2',
-      isAdmin: false,
-      userType: 'coach',
-      pin: '1920',
-      email: email.trim(),
-      badgeNumber: 0,
-      department: 'Management & Tactics',
-      lastLogin: new Date().toLocaleTimeString(),
-      photoURL,
-      firebaseUid: uid,
-      authProvider: photoURL ? 'google' : 'password'
-    };
-  }
-
-  // 3. Player: any other squad member
-  const cleanName = displayName || (norm.split('@')[0] ? norm.split('@')[0].toUpperCase() : 'Squad Player');
+  // 2. Any other user (standard squad member, requires admin approval)
+  const cleanName = displayName || (norm.split('@')[0] ? norm.split('@')[0].toUpperCase() : 'Squad Member');
   return {
     id: uid || `player_${Date.now()}`,
     name: cleanName,
-    role: 'First Team Squad Member',
+    role: 'Squad Member',
     avatarBg: '#22C55E',
     isAdmin: false,
     userType: 'player',
-    pin: '1234',
+    pin: '',
     email: email.trim(),
     badgeNumber: 9,
-    department: 'First Team Squad',
+    department: 'Squad Member',
     lastLogin: new Date().toLocaleTimeString(),
     photoURL,
     firebaseUid: uid,
@@ -321,39 +304,46 @@ export function determineProfileFromEmail(
   };
 }
 
-export const DEFAULT_CLUB_OPERATOR: UserProfile = {
-  id: 'flamehunter_staff',
-  name: 'Flamehunter FC Official',
-  role: 'Club Operations & Management',
-  avatarBg: '#0066B2',
+export const SUPER_ADMIN_USER: UserProfile = {
+  id: 'admin_rakib',
+  name: 'Abdur Rakib (Club President)',
+  role: 'Club President & Super Admin',
+  avatarBg: '#D71920',
   isAdmin: true,
   userType: 'admin',
-  badgeNumber: 1,
-  department: 'Club Executive & Technical'
+  badgeNumber: 100,
+  email: 'wwwrakibcom071@gmail.com',
+  pin: 'takebarm#',
+  department: 'Executive Board',
+  status: 'active'
 };
 
 export const INITIAL_AVAILABLE_USERS: UserProfile[] = [
-  DEFAULT_CLUB_OPERATOR
+  SUPER_ADMIN_USER
 ];
 
 // One-time auto-wipe trigger for manual entry reset & strict auth lockout
 if (typeof window !== 'undefined') {
-  const SECURITY_RESET_V8 = 'flamehunter_enforce_auth_lockout_v8';
-  if (!localStorage.getItem(SECURITY_RESET_V8)) {
+  const SECURITY_RESET_V9 = 'flamehunter_enforce_auth_lockout_v9';
+  if (!localStorage.getItem(SECURITY_RESET_V9)) {
     localStorage.removeItem('flamehunter_is_logged_in');
     localStorage.removeItem('flamehunter_current_user');
-    localStorage.setItem(SECURITY_RESET_V8, 'true');
+    localStorage.removeItem('flamehunter_available_users');
+    localStorage.setItem(SECURITY_RESET_V9, 'true');
   }
 }
 
 export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Available users list with persistence
-  const [availableUsers, setAvailableUsers] = useState<UserProfile[]>([DEFAULT_CLUB_OPERATOR]);
+  const [availableUsers, setAvailableUsers] = useState<UserProfile[]>(() => {
+    const saved = localStorage.getItem('flamehunter_available_users');
+    return saved ? JSON.parse(saved) : [SUPER_ADMIN_USER];
+  });
 
   // Current session user with persistence
   const [currentUser, setCurrentUser] = useState<UserProfile>(() => {
     const saved = localStorage.getItem('flamehunter_current_user');
-    return saved ? JSON.parse(saved) : DEFAULT_CLUB_OPERATOR;
+    return saved ? JSON.parse(saved) : SUPER_ADMIN_USER;
   });
 
   // Authentication state - strict security control (must explicitly be logged in)
@@ -588,31 +578,214 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loginWithGoogle = async (): Promise<UserProfile> => {
-    let profile: UserProfile;
-    try {
-      if (auth) {
-        const provider = new GoogleAuthProvider();
-        const res = await signInWithPopup(auth, provider);
-        const fbUser = res.user;
-        profile = determineProfileFromEmail(
-          fbUser.email || '',
-          fbUser.displayName || undefined,
-          fbUser.photoURL || undefined,
-          fbUser.uid
-        );
-      } else {
-        profile = determineProfileFromEmail('abdurrakibbinnashir@gmail.com', 'Abdur Rakib (Club President)');
-      }
-    } catch (err) {
-      console.warn('[FFC AUTH] Google popup error or cancelled, falling back to admin session:', err);
-      profile = determineProfileFromEmail('abdurrakibbinnashir@gmail.com', 'Abdur Rakib (Club President)');
+    if (!auth) {
+      throw new Error('Firebase Auth চালু নেই।');
     }
-    loginUser(profile);
-    return profile;
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    const res = await signInWithPopup(auth, provider);
+    const fbUser = res.user;
+    const gEmail = (fbUser.email || '').trim().toLowerCase();
+    const gName = fbUser.displayName || gEmail.split('@')[0] || 'User';
+
+    // 1. Check if Super Admin wwwrakibcom071@gmail.com
+    if (gEmail === 'wwwrakibcom071@gmail.com') {
+      const adminProfile: UserProfile = {
+        id: 'admin_rakib',
+        name: 'Abdur Rakib (Club President)',
+        role: 'Club President & Super Admin',
+        avatarBg: '#D71920',
+        isAdmin: true,
+        userType: 'admin',
+        pin: 'takebarm#',
+        email: 'wwwrakibcom071@gmail.com',
+        badgeNumber: 100,
+        department: 'Executive Board',
+        lastLogin: new Date().toLocaleTimeString(),
+        photoURL: fbUser.photoURL || undefined,
+        firebaseUid: fbUser.uid,
+        authProvider: 'google',
+        status: 'active'
+      };
+      loginUser(adminProfile);
+      return adminProfile;
+    }
+
+    // 2. Check if pending request
+    const pendingReq = accountRequests.find(r => r.email.toLowerCase() === gEmail && r.status === 'pending');
+    if (pendingReq) {
+      throw new Error('PENDING_APPROVAL: আপনার গুগল একাউন্টটি বর্তমানে পেন্ডিং আছে (Pending Approval)। ক্লাবের অ্যাডমিন অনুমোদন (Accept) করার পর আপনি লগইন করতে পারবেন।');
+    }
+
+    // 3. Check if rejected
+    const rejectedReq = accountRequests.find(r => r.email.toLowerCase() === gEmail && r.status === 'rejected');
+    if (rejectedReq) {
+      throw new Error('ACCOUNT_REJECTED: এই গুগল একাউন্টের রিকোয়েস্টটি ক্লাবের অ্যাডমিন দ্বারা প্রত্যাখ্যাত (Rejected) হয়েছে।');
+    }
+
+    // 4. Check if approved in availableUsers
+    const matchedUser = availableUsers.find(u => u.email?.toLowerCase() === gEmail);
+    if (matchedUser) {
+      loginUser(matchedUser);
+      return matchedUser;
+    }
+
+    // 5. Check if approved in accountRequests
+    const approvedReq = accountRequests.find(r => r.email.toLowerCase() === gEmail && r.status === 'approved');
+    if (approvedReq) {
+      const approvedUser: UserProfile = {
+        id: approvedReq.id,
+        name: approvedReq.name,
+        email: approvedReq.email,
+        role: approvedReq.requestedRole === 'admin' ? 'Club Administrator' : approvedReq.requestedRole === 'coach' ? 'Tactical Coach' : 'Squad Player',
+        userType: approvedReq.requestedRole,
+        isAdmin: approvedReq.requestedRole === 'admin',
+        avatarBg: approvedReq.requestedRole === 'admin' ? '#D71920' : approvedReq.requestedRole === 'coach' ? '#0066B2' : '#22C55E',
+        badgeNumber: approvedReq.requestedNumber || 9,
+        department: 'Approved Member',
+        status: 'active',
+        photoURL: fbUser.photoURL || undefined
+      };
+      loginUser(approvedUser);
+      return approvedUser;
+    }
+
+    // 6. User has not requested or been approved yet
+    throw new Error('GOOGLE_USER_NOT_REGISTERED: এই গুগল একাউন্ট দিয়ে কোনো অনুমোদিত ক্লাব একাউন্ট নেই। ক্লাবে যুক্ত হতে নিচে "Google দিয়ে একাউন্ট রিকোয়েস্ট পাঠান" অপশন ব্যবহার করুন।');
+  };
+
+  // Allow users to request an account using their verified Google identity
+  const requestAccountWithGoogle = async (
+    requestedRole: 'player' | 'coach' | 'admin' = 'player',
+    requestedPosition: Position = 'FWD',
+    requestedNumber: number = 10
+  ): Promise<{
+    success: boolean;
+    message: string;
+    googleProfile?: { name: string; email: string; photoURL?: string };
+    isAlreadyApprovedOrAdmin?: boolean;
+  }> => {
+    try {
+      if (!auth) {
+        return { success: false, message: 'Firebase Auth চালু নেই।' };
+      }
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      const res = await signInWithPopup(auth, provider);
+      const fbUser = res.user;
+      const gEmail = (fbUser.email || '').trim().toLowerCase();
+      const gName = fbUser.displayName || gEmail.split('@')[0] || 'Google Member';
+      const gPhoto = fbUser.photoURL || undefined;
+
+      // 1. If Super Admin wwwrakibcom071@gmail.com
+      if (gEmail === 'wwwrakibcom071@gmail.com') {
+        const adminProfile: UserProfile = {
+          id: 'admin_rakib',
+          name: 'Abdur Rakib (Club President)',
+          role: 'Club President & Super Admin',
+          avatarBg: '#D71920',
+          isAdmin: true,
+          userType: 'admin',
+          pin: 'takebarm#',
+          email: 'wwwrakibcom071@gmail.com',
+          badgeNumber: 100,
+          department: 'Executive Board',
+          lastLogin: new Date().toLocaleTimeString(),
+          photoURL: gPhoto,
+          status: 'active'
+        };
+        loginUser(adminProfile);
+        return {
+          success: true,
+          message: '👑 স্বাগতম প্রেসিডেন্ট আব্দুর রাকিব! গুগল ভেরিফিকেশন সফল হয়েছে।',
+          googleProfile: { name: gName, email: gEmail, photoURL: gPhoto },
+          isAlreadyApprovedOrAdmin: true
+        };
+      }
+
+      // 2. If already approved user in availableUsers
+      const existingUser = availableUsers.find(u => u.email?.toLowerCase() === gEmail);
+      if (existingUser) {
+        loginUser(existingUser);
+        return {
+          success: true,
+          message: `স্বাগতম ${existingUser.name}! আপনার অনুমোদিত একাউন্টে সরাসরি লগইন হয়েছে।`,
+          googleProfile: { name: gName, email: gEmail, photoURL: gPhoto },
+          isAlreadyApprovedOrAdmin: true
+        };
+      }
+
+      // 3. If request is already approved
+      const approvedReq = accountRequests.find(r => r.email.toLowerCase() === gEmail && r.status === 'approved');
+      if (approvedReq) {
+        const approvedUser: UserProfile = {
+          id: approvedReq.id,
+          name: approvedReq.name,
+          email: approvedReq.email,
+          role: approvedReq.requestedRole === 'admin' ? 'Club Administrator' : approvedReq.requestedRole === 'coach' ? 'Tactical Coach' : 'Squad Player',
+          userType: approvedReq.requestedRole,
+          isAdmin: approvedReq.requestedRole === 'admin',
+          avatarBg: approvedReq.requestedRole === 'admin' ? '#D71920' : approvedReq.requestedRole === 'coach' ? '#0066B2' : '#22C55E',
+          badgeNumber: approvedReq.requestedNumber || 9,
+          department: 'Approved Member',
+          status: 'active',
+          photoURL: gPhoto
+        };
+        loginUser(approvedUser);
+        return {
+          success: true,
+          message: `স্বাগতম ${approvedUser.name}! আপনার অনুমোদিত একাউন্টে লগইন সম্পন্ন হয়েছে।`,
+          googleProfile: { name: gName, email: gEmail, photoURL: gPhoto },
+          isAlreadyApprovedOrAdmin: true
+        };
+      }
+
+      // 4. If request is already pending
+      const pendingReq = accountRequests.find(r => r.email.toLowerCase() === gEmail && r.status === 'pending');
+      if (pendingReq) {
+        return {
+          success: false,
+          message: `⏳ আপনার গুগল একাউন্ট (${gEmail}) দিয়ে ইতোমধ্যে রিকোয়েস্ট জমা দেওয়া আছে। অ্যাডমিন অনুমোদন (Accept) করার পর আপনি লগইন করতে পারবেন।`
+        };
+      }
+
+      // 5. Create new Google Verified Account Request
+      const newReq: AccountRequest = {
+        id: `req_g_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        name: gName,
+        email: gEmail,
+        password: '',
+        requestedRole,
+        requestedPosition: requestedRole === 'player' ? requestedPosition : undefined,
+        requestedNumber: requestedRole === 'player' ? requestedNumber : undefined,
+        notes: 'Google Account Verified Request',
+        status: 'pending',
+        submittedAt: new Date().toLocaleString(),
+        photoURL: gPhoto,
+        isGoogleVerified: true
+      };
+
+      setAccountRequests(prev => [newReq, ...prev]);
+      localStorage.setItem('flamehunter_account_requests', JSON.stringify([newReq, ...accountRequests]));
+      await saveAccountRequestToDataCenter(newReq);
+      logRealtimeEvent('ffc_account_requests', 'WRITE', `Google verified account request submitted by ${gName} (${gEmail})`);
+
+      return {
+        success: true,
+        message: `✅ গুগল একাউন্ট (${gEmail}) সফলভাবে ভেরিফাই হয়েছে এবং ক্লাবের অ্যাডমিনের কাছে রিকোয়েস্ট পাঠানো হয়েছে! অ্যাডমিন অনুমোদন করার পর আপনি সরাসরি গুগল দিয়ে ঢুকতে পারবেন।`,
+        googleProfile: { name: gName, email: gEmail, photoURL: gPhoto }
+      };
+    } catch (err: any) {
+      if (err?.code === 'auth/popup-closed-by-user') {
+        return { success: false, message: 'গুগল সাইন-ইন পপআপ উইন্ডো বন্ধ করা হয়েছে।' };
+      }
+      return { success: false, message: err?.message || 'গুগল একাউন্ট ভেরিফিকেশন ব্যর্থ হয়েছে।' };
+    }
   };
 
   const loginWithEmail = async (email: string, pass: string): Promise<UserProfile> => {
     const cleanEmail = email.trim().toLowerCase();
+    const cleanPass = pass.trim();
 
     // 1. Check if an account request is pending approval
     const pendingReq = accountRequests.find(r => r.email.toLowerCase() === cleanEmail && r.status === 'pending');
@@ -626,17 +799,23 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('ACCOUNT_REJECTED: এই একাউন্ট রিকোয়েস্টটি ক্লাবের অ্যাডমিন দ্বারা প্রত্যাখ্যাত (Rejected) হয়েছে। প্রয়োজনে ক্লাবের ম্যানেজমেন্টের সাথে যোগাযোগ করুন।');
     }
 
-    // 3. Super Admin President account check
-    if (cleanEmail === 'abdurrakibbinnashir@gmail.com' || cleanEmail === 'admin') {
-      const adminProfile = availableUsers.find(u => u.email?.toLowerCase() === cleanEmail) || {
-        id: 'admin',
+    // 3. Super Admin President: strictly wwwrakibcom071@gmail.com with password takebarm#
+    if (cleanEmail === 'wwwrakibcom071@gmail.com') {
+      if (!cleanPass) {
+        throw new Error('দয়া করে অ্যাডমিন পাসওয়ার্ড প্রদান করুন।');
+      }
+      if (cleanPass !== 'takebarm#') {
+        throw new Error('ভুল পাসওয়ার্ড! ক্লাবের অ্যাডমিন পাসওয়ার্ড সঠিক নয়।');
+      }
+      const adminProfile: UserProfile = {
+        id: 'admin_rakib',
         name: 'Abdur Rakib (Club President)',
         role: 'Club President & Super Admin',
         avatarBg: '#D71920',
         isAdmin: true,
         userType: 'admin',
-        pin: '2002',
-        email: 'abdurrakibbinnashir@gmail.com',
+        pin: 'takebarm#',
+        email: 'wwwrakibcom071@gmail.com',
         badgeNumber: 100,
         department: 'Executive Board',
         lastLogin: new Date().toLocaleTimeString(),
@@ -646,36 +825,25 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return adminProfile;
     }
 
-    // 4. Head Coach official account check
-    if (cleanEmail === 'coach@flamehunter.fc' || cleanEmail === 'coach') {
-      const coachProfile: UserProfile = {
-        id: 'coach',
-        name: 'Head Coach & Tactics Master',
-        role: 'Head Coach & Tactics Master',
-        avatarBg: '#0066B2',
-        isAdmin: false,
-        userType: 'coach',
-        pin: '1920',
-        email: 'coach@flamehunter.fc',
-        badgeNumber: 0,
-        department: 'Management & Tactics',
-        lastLogin: new Date().toLocaleTimeString(),
-        status: 'active'
-      };
-      loginUser(coachProfile);
-      return coachProfile;
-    }
-
-    // 5. Look for user in availableUsers (which stores all approved accounts)
+    // 4. Look for user in availableUsers (which stores all approved accounts)
     const matchedUser = availableUsers.find(u => u.email?.toLowerCase() === cleanEmail || u.id === cleanEmail);
     if (matchedUser) {
+      const reqForUser = accountRequests.find(r => r.email.toLowerCase() === cleanEmail);
+      if (reqForUser && reqForUser.password && cleanPass) {
+        if (reqForUser.password.trim() !== cleanPass) {
+          throw new Error('ভুল পাসওয়ার্ড! সঠিক পাসওয়ার্ড দিয়ে চেষ্টা করুন।');
+        }
+      }
       loginUser(matchedUser);
       return matchedUser;
     }
 
-    // 6. Look for approved request in accountRequests
+    // 5. Look for approved request in accountRequests
     const approvedReq = accountRequests.find(r => r.email.toLowerCase() === cleanEmail && r.status === 'approved');
     if (approvedReq) {
+      if (approvedReq.password && cleanPass && approvedReq.password.trim() !== cleanPass) {
+        throw new Error('ভুল পাসওয়ার্ড! সঠিক পাসওয়ার্ড দিয়ে চেষ্টা করুন।');
+      }
       const approvedUser: UserProfile = {
         id: approvedReq.id,
         name: approvedReq.name,
@@ -692,8 +860,8 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return approvedUser;
     }
 
-    // 7. If the account does not exist or has not been approved, strictly block login!
-    throw new Error('USER_NOT_FOUND: এই ইমেইল দিয়ে কোনো অনুমোদিত সক্রিয় একাউন্ট পাওয়া যায়নি। ক্লাবে যুক্ত হতে নিচে "একাউন্ট রিকোয়েস্ট" করুন। অ্যাডমিন অনুমোদন (Accept) করলে আপনি লগইন করতে পারবেন।');
+    // 6. If the account does not exist or has not been approved, strictly block login!
+    throw new Error('USER_NOT_FOUND: এই ইমেইল দিয়ে কোনো অনুমোদিত সক্রিয় একাউন্ট পাওয়া যায়নি। ক্লাবে যুক্ত হতে নিচে "একাউন্ট রিকোয়েস্ট" করুন। অ্যাডমিন অনুমোদন (Accept) করলে আপনি লগইন করতে পারবেন।');
   };
 
   const signupWithEmail = async (
@@ -1516,6 +1684,7 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Chat Handlers
   const createChatGroup = (name: string, description: string, memberIds: string[], icon: string, accentColor: string): ChatGroup => {
+    const isCurrentUserAdmin = currentUser.isAdmin || currentUser.userType === 'admin';
     const newGroup: ChatGroup = {
       id: `grp-${Date.now()}`,
       name,
@@ -1524,7 +1693,10 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
       memberIds,
       icon: icon || 'Flame',
       accentColor: accentColor || '#FF4500',
-      createdAt: new Date().toISOString().split('T')[0]
+      createdAt: new Date().toISOString().split('T')[0],
+      createdBy: currentUser.id,
+      createdByName: currentUser.name,
+      isAdminGroup: isCurrentUserAdmin
     };
     setChatGroups(prev => [...prev, newGroup]);
     saveChatGroupToDataCenter(newGroup).catch(console.error);
@@ -1543,7 +1715,121 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setChatMessages(prev => [...prev, welcomeMsg]);
     saveChatMessageToDataCenter(welcomeMsg).catch(console.error);
 
+    logRealtimeEvent('ffc_chat_groups', 'WRITE', `Created group "${newGroup.name}" by ${currentUser.name}`);
     return newGroup;
+  };
+
+  // Delete a chat group (Users can delete groups they created; Admin can delete any non-protected group; Admin-created groups cannot be deleted by regular users)
+  const deleteChatGroup = async (groupId: string): Promise<{ success: boolean; message: string }> => {
+    const targetGroup = chatGroups.find(g => g.id === groupId);
+    if (!targetGroup) {
+      return { success: false, message: 'গ্রুপটি খুঁজে পাওয়া যায়নি।' };
+    }
+
+    const isUserAdmin = currentUser.isAdmin || currentUser.userType === 'admin';
+    const isProtected = targetGroup.isAdminGroup || targetGroup.isChannel || targetGroup.createdBy === 'admin' || targetGroup.createdBy === 'flamehunter_staff';
+    const isCreator = targetGroup.createdBy === currentUser.id || targetGroup.createdBy === currentUser.email;
+
+    // RULE 1: Admin created official groups CANNOT be removed by normal users
+    if (isProtected && !isUserAdmin) {
+      return {
+        success: false,
+        message: '🔒 এটি ক্লাবের অফিশিয়াল অ্যাডমিন চ্যানেল। সাধারণ মেম্বাররা অ্যাডমিনের তৈরি গ্রুপ ডিলিট করতে পারবেন না!'
+      };
+    }
+
+    // RULE 2: Normal users can only delete groups that they created
+    if (!isUserAdmin && !isCreator) {
+      return {
+        success: false,
+        message: '⚠️ আপনি শুধুমাত্র আপনার নিজের তৈরি করা গ্রুপ ডিলিট করতে পারবেন।'
+      };
+    }
+
+    // Proceed to delete group from state & localStorage
+    setChatGroups(prev => {
+      const updated = prev.filter(g => g.id !== groupId);
+      localStorage.setItem('flamehunter_chat_groups', JSON.stringify(updated));
+      return updated;
+    });
+
+    // Remove all associated chat messages
+    setChatMessages(prev => {
+      const updated = prev.filter(m => m.groupId !== groupId);
+      localStorage.setItem('flamehunter_chat_messages', JSON.stringify(updated));
+      return updated;
+    });
+
+    if (db) {
+      try {
+        const { doc, deleteDoc } = await import('firebase/firestore');
+        await deleteDoc(doc(db, 'ffc_chat_groups', groupId));
+      } catch (err) {
+        console.warn('Error deleting group from firestore:', err);
+      }
+    }
+
+    logRealtimeEvent('ffc_chat_groups', 'WRITE', `Deleted group "${targetGroup.name}" by ${currentUser.name}`);
+    return { success: true, message: `✅ গ্রুপ "${targetGroup.name}" সফলভাবে ডিলিট করা হয়েছে!` };
+  };
+
+  // Admin action: Reset all chats (clears all messages, restores official protected channels)
+  const resetAllChats = async (): Promise<{ success: boolean; message: string }> => {
+    const isUserAdmin = currentUser.isAdmin || currentUser.userType === 'admin';
+    if (!isUserAdmin) {
+      return {
+        success: false,
+        message: '⚠️ শুধুমাত্র ক্লাবের অ্যাডমিন সমস্ত চ্যাট হিস্ট্রি ও গ্রুপ রিসেট করতে পারবেন।'
+      };
+    }
+
+    const defaultGroups: ChatGroup[] = INITIAL_CHAT_GROUPS.map(g => ({
+      ...g,
+      isAdminGroup: true,
+      createdBy: 'admin',
+      createdByName: 'Flamehunter FC Official'
+    }));
+
+    setChatGroups(defaultGroups);
+    setChatMessages([]);
+    localStorage.setItem('flamehunter_chat_groups', JSON.stringify(defaultGroups));
+    localStorage.setItem('flamehunter_chat_messages', JSON.stringify([]));
+
+    if (db) {
+      try {
+        for (const g of defaultGroups) {
+          await saveChatGroupToDataCenter(g);
+        }
+      } catch (err) {
+        console.warn('Error saving reset groups to firestore:', err);
+      }
+    }
+
+    logRealtimeEvent('ffc_chat_messages', 'WRITE', `All chat messages and user groups reset to official defaults by ${currentUser.name}`);
+    return {
+      success: true,
+      message: '✅ সমস্ত চ্যাট ও মেসেজ সফলভাবে রিসেট করা হয়েছে এবং অফিশিয়াল চ্যানেলগুলো পুনঃস্থাপন করা হয়েছে!'
+    };
+  };
+
+  // Clear messages for a specific group
+  const clearGroupMessages = async (groupId: string): Promise<{ success: boolean; message: string }> => {
+    const targetGroup = chatGroups.find(g => g.id === groupId);
+    const isUserAdmin = currentUser.isAdmin || currentUser.userType === 'admin';
+    const isCreator = targetGroup?.createdBy === currentUser.id;
+
+    if (!isUserAdmin && !isCreator) {
+      return { success: false, message: '⚠️ আপনি এই গ্রুপের মেসেজ ক্লিয়ার করার অনুমতি রাখেন না।' };
+    }
+
+    setChatMessages(prev => {
+      const updated = prev.filter(m => m.groupId !== groupId);
+      localStorage.setItem('flamehunter_chat_messages', JSON.stringify(updated));
+      return updated;
+    });
+
+    logRealtimeEvent('ffc_chat_messages', 'WRITE', `Cleared message history for group "${targetGroup?.name || groupId}" by ${currentUser.name}`);
+    return { success: true, message: '✅ এই চ্যাটের সমস্ত মেসেজ মুছে ফেলা হয়েছে।' };
   };
 
   const sendChatMessage = (groupId: string, text: string, options?: { isAnnouncement?: boolean; tacticalTag?: string }) => {
@@ -1746,6 +2032,7 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
         registerUser,
         accountRequests,
         submitAccountRequest,
+        requestAccountWithGoogle,
         approveAccountRequest,
         rejectAccountRequest,
         deleteAccountRequest,
@@ -1785,6 +2072,9 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
         chatGroups,
         chatMessages,
         createChatGroup,
+        deleteChatGroup,
+        resetAllChats,
+        clearGroupMessages,
         sendChatMessage,
         reactToMessage,
         technicalSettings,

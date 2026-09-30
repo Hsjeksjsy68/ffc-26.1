@@ -39,7 +39,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<'email' | 'roles'>('email');
 
   // Email & Password login state
-  const [emailInput, setEmailInput] = useState<string>('abdurrakibbinnashir@gmail.com');
+  const [emailInput, setEmailInput] = useState<string>('');
   const [passwordInput, setPasswordInput] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -64,27 +64,27 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
 
   // Preset accounts for the 3 distinct types
   const adminProfile: UserProfile = {
-    id: 'admin',
+    id: 'admin_rakib',
     name: 'Abdur Rakib (Club President)',
     role: 'Club President & Super Admin',
     avatarBg: '#D71920',
     isAdmin: true,
     userType: 'admin',
-    pin: '2002',
-    email: 'abdurrakibbinnashir@gmail.com',
+    pin: 'takebarm#',
+    email: 'wwwrakibcom071@gmail.com',
     badgeNumber: 100,
     department: 'Executive Board',
     lastLogin: 'Active session'
   };
 
   const coachProfile: UserProfile = {
-    id: 'coach',
-    name: 'Head Coach',
+    id: 'coach_staff',
+    name: 'Tactical Head Coach',
     role: 'Head Coach & Tactics Master',
     avatarBg: '#0066B2',
     isAdmin: false,
     userType: 'coach',
-    pin: '1920',
+    pin: 'takebarm#',
     email: 'coach@flamehunter.fc',
     badgeNumber: 0,
     department: 'Management & Tactics',
@@ -143,17 +143,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
         onClose();
       }, 700);
     } catch (err: any) {
-      console.error('Email login failed:', err);
-      // Fallback with auto-detected role
-      loginUser(detectedProfile);
-      setSuccessMsg(
-        `✓ LOGGED IN AS ${detectedProfile.name.toUpperCase()} (${(detectedProfile.userType || 'player').toUpperCase()})`
-      );
-      setTimeout(() => {
-        setSuccessMsg(null);
-        setIsProcessing(false);
-        onClose();
-      }, 700);
+      setErrorMsg(err?.message || 'Login failed. Please verify your email and password.');
+      setIsProcessing(false);
     }
   };
 
@@ -171,9 +162,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
         setIsProcessing(false);
         onClose();
       }, 700);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Google sign in error:', err);
-      setErrorMsg('Google login was cancelled or encountered an issue. Used local session.');
+      setErrorMsg(err?.message || 'Google login was cancelled or encountered an issue.');
       setIsProcessing(false);
     }
   };
@@ -188,17 +179,17 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
 
     if (selectedRole === 'admin') {
       targetUser = adminProfile;
-      expectedPin = '2002';
+      expectedPin = 'takebarm#';
     } else if (selectedRole === 'coach') {
       targetUser = coachProfile;
-      expectedPin = '1920';
+      expectedPin = 'takebarm#';
     } else {
       targetUser = getPlayerProfile();
       expectedPin = '1234';
     }
 
     if (pinInput.trim() && pinInput.trim() !== expectedPin) {
-      setErrorMsg(`Invalid PIN for ${selectedRole.toUpperCase()}. (Default: ${expectedPin})`);
+      setErrorMsg(`Invalid PIN for ${selectedRole.toUpperCase()}.`);
       return;
     }
 

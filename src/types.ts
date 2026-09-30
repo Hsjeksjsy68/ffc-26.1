@@ -55,6 +55,8 @@ export interface AccountRequest {
   reviewedBy?: string;
   linkedPlayerId?: string;
   rejectionReason?: string;
+  photoURL?: string;
+  isGoogleVerified?: boolean;
 }
 
 export type EventType = 'Match' | 'Training' | 'Briefing' | 'Club Event';
@@ -173,6 +175,9 @@ export interface ChatGroup {
   icon: string;
   accentColor: string;
   createdAt: string;
+  createdBy?: string; // userId or 'admin'
+  createdByName?: string;
+  isAdminGroup?: boolean; // whether this group is created by admin/official club
 }
 
 export type FormationType =

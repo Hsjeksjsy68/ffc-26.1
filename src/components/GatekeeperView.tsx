@@ -25,6 +25,7 @@ export const GatekeeperView: React.FC = () => {
     loginWithGoogle,
     loginWithEmail,
     submitAccountRequest,
+    requestAccountWithGoogle,
     accountRequests,
     availableUsers,
     players
@@ -49,6 +50,46 @@ export const GatekeeperView: React.FC = () => {
   const [reqNotes, setReqNotes] = useState('');
   const [requestSuccessMsg, setRequestSuccessMsg] = useState<string | null>(null);
   const [requestErrorMsg, setRequestErrorMsg] = useState<string | null>(null);
+
+  // Handle Direct Google Sign In (for approved members / admin)
+  const handleGoogleDirectLogin = async () => {
+    setLoginError(null);
+    setIsProcessing(true);
+    try {
+      await loginWithGoogle();
+    } catch (err: any) {
+      if (err.message && err.message.startsWith('PENDING_APPROVAL:')) {
+        setLoginError(err.message.replace('PENDING_APPROVAL:', ''));
+      } else if (err.message && err.message.startsWith('ACCOUNT_REJECTED:')) {
+        setLoginError(err.message.replace('ACCOUNT_REJECTED:', ''));
+      } else if (err.message && err.message.startsWith('GOOGLE_USER_NOT_REGISTERED:')) {
+        setLoginError(err.message.replace('GOOGLE_USER_NOT_REGISTERED:', ''));
+      } else {
+        setLoginError(err.message || 'গুগল লগইন ব্যর্থ হয়েছে।');
+      }
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Handle Google Request Access (allows requesting an account via Google verification)
+  const handleGoogleRequest = async () => {
+    setRequestErrorMsg(null);
+    setRequestSuccessMsg(null);
+    setIsProcessing(true);
+    try {
+      const res = await requestAccountWithGoogle(reqRole, reqPosition, Number(reqNumber));
+      if (res.success) {
+        setRequestSuccessMsg(res.message);
+      } else {
+        setRequestErrorMsg(res.message);
+      }
+    } catch (err: any) {
+      setRequestErrorMsg(err?.message || 'গুগল দিয়ে রিকোয়েস্ট করতে সমস্যা হয়েছে।');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   // Handle Login Submit
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -278,36 +319,30 @@ export const GatekeeperView: React.FC = () => {
               </button>
             </div>
 
-            {/* Quick Fill Credentials Helper (Fills fields only, requires real submission) */}
-            <div className="pt-3 border-t-2 border-black/10">
-              <span className="text-[10px] font-black uppercase text-neutral-500 block mb-1.5 text-center">
-                অ্যাডমিন টেস্ট ক্রেডেনশিয়াল পূরণ করুন:
-              </span>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLoginEmail('abdurrakibbinnashir@gmail.com');
-                    setLoginPassword('2002');
-                    setLoginError(null);
-                  }}
-                  className="flex-1 bg-[#FFFEEA] hover:bg-[#FFE600] text-black border border-black py-1.5 px-2 text-[10px] font-black uppercase text-center cursor-pointer transition-colors"
-                >
-                  🛡️ Admin: abdurrakib... (Pin: 2002)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLoginEmail('coach@flamehunter.fc');
-                    setLoginPassword('1920');
-                    setLoginError(null);
-                  }}
-                  className="flex-1 bg-[#F0FDF4] hover:bg-[#22C55E] text-black border border-black py-1.5 px-2 text-[10px] font-black uppercase text-center cursor-pointer transition-colors"
-                >
-                  📋 Coach: coach@flame... (Pin: 1920)
-                </button>
+            <div className="relative my-3 text-center">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-black/20" />
               </div>
+              <span className="relative bg-white px-2 text-[10px] font-black uppercase text-neutral-400">
+                অথবা গুগল দিয়ে
+              </span>
             </div>
+
+            {/* Direct Google Sign In Button */}
+            <button
+              type="button"
+              onClick={handleGoogleDirectLogin}
+              disabled={isProcessing}
+              className="w-full bg-white hover:bg-neutral-50 text-black border-2 border-black py-2.5 px-4 text-xs font-black uppercase tracking-wider shadow-[3px_3px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer flex items-center justify-center gap-2.5"
+            >
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+              </svg>
+              <span>GOOGLE দিয়ে সাইন ইন (SIGN IN)</span>
+            </button>
           </div>
         )}
 
@@ -320,8 +355,41 @@ export const GatekeeperView: React.FC = () => {
                 <span>অ্যাডমিন অনুমোদন আবশ্যক (ADMIN APPROVAL REQUIRED)</span>
               </div>
               <p className="text-[11px] text-neutral-700 leading-normal">
-                যে কেউ চাইলেই সরাসরি সক্রিয় একাউন্ট তৈরি করতে পারবে না। রিকোয়েস্ট সাবমিট করার পর ক্লাবের অ্যাডমিন রিভিউ করে <strong>অনুমোদন (Accept)</strong> দিলে আপনার একাউন্ট সক্রিয় হবে।
+                রিকোয়েস্ট সাবমিট করার পর ক্লাবের অ্যাডমিন রিভিউ করে <strong>অনুমোদন (Accept)</strong> দিলে আপনার একাউন্ট সক্রিয় হবে।
               </p>
+            </div>
+
+            {/* Quick Google Request Access Banner */}
+            <div className="bg-[#FFFEEA] border-2 border-black p-3.5 shadow-[3px_3px_0px_0px_#000] space-y-2">
+              <span className="text-[11px] font-black uppercase text-black block">
+                ⚡ দ্রুত ভেরিফাইড রিকোয়েস্ট পাঠান:
+              </span>
+              <button
+                type="button"
+                onClick={handleGoogleRequest}
+                disabled={isProcessing}
+                className="w-full bg-white hover:bg-neutral-100 text-black border-2 border-black py-2.5 px-3 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer flex items-center justify-center gap-2"
+              >
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                </svg>
+                <span>GOOGLE দিয়ে একাউন্ট রিকোয়েস্ট পাঠান (REQUEST ACCESS)</span>
+              </button>
+              <p className="text-[10px] text-neutral-600 font-bold leading-tight">
+                * গুগল দিয়ে রিকোয়েস্ট পাঠালে আপনার ভেরিফাইড নাম, ছবি ও ইমেইল সরাসরি ক্লাবের অ্যাডমিনের কাছে চলে যাবে।
+              </p>
+            </div>
+
+            <div className="relative my-2 text-center">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-black/20" />
+              </div>
+              <span className="relative bg-white px-2 text-[10px] font-black uppercase text-neutral-400">
+                অথবা ম্যানুয়ালি ফর্ম পূরণ করুন
+              </span>
             </div>
 
             {requestSuccessMsg && (
