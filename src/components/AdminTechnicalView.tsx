@@ -1670,6 +1670,381 @@ export const AdminTechnicalView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ========================================================
+          TAB: ACCOUNT ACCESS REQUESTS & APPROVAL WORKFLOW
+         ======================================================== */}
+      {activeAdminTab === 'accounts' && isUserAdmin && (
+        <div className="space-y-6 animate-fadeIn">
+          {/* Top Banner */}
+          <div className="bg-[#0084FF] text-white border-3 border-black p-4 sm:p-5 shadow-[4px_4px_0px_0px_#000] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="bg-[#FFE600] text-black font-black text-[10px] px-2 py-0.5 border border-black uppercase">
+                  SECURITY & ACCESS CONTROL
+                </span>
+                <span className="text-xs font-bold text-blue-100 uppercase">
+                  APPROVAL WORKFLOW
+                </span>
+              </div>
+              <h3 className="text-lg sm:text-xl font-black uppercase text-white mt-1">
+                📋 একাউন্ট তৈরি ও অ্যাক্সেস রিকোয়েস্ট (ACCOUNT REQUESTS)
+              </h3>
+              <p className="text-xs font-bold text-blue-100 uppercase mt-0.5 max-w-2xl">
+                যে কেউ চাইলেই সরাসরি একাউন্ট তৈরি করতে পারবে না। শুধুমাত্র ক্লাবের অ্যাডমিন রিভিউ করে অনুমোদন (Accept) করলে সেই একাউন্ট কার্যকর হবে।
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="bg-white text-black border-2 border-black px-3 py-1.5 text-center shadow-[2px_2px_0px_0px_#000]">
+                <span className="text-[10px] font-black uppercase text-neutral-500 block">পেন্ডিং আবেদন</span>
+                <span className="text-xl font-black text-[#D71920]">
+                  {accountRequests.filter(r => r.status === 'pending').length}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Pending Requests List */}
+          <div className="bg-white border-3 border-black p-4 sm:p-5 shadow-[4px_4px_0px_0px_#000] space-y-4">
+            <div className="flex items-center justify-between border-b-2 border-black pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 bg-[#FFE600] border-2 border-black flex items-center justify-center font-black text-xs">
+                  ⏳
+                </div>
+                <h4 className="font-black uppercase text-sm sm:text-base text-black">
+                  পেন্ডিং একাউন্ট আবেদনসমূহ ({accountRequests.filter(r => r.status === 'pending').length})
+                </h4>
+              </div>
+            </div>
+
+            {accountRequests.filter(r => r.status === 'pending').length === 0 ? (
+              <div className="p-8 text-center bg-[#F6F7FA] border-2 border-dashed border-black space-y-2">
+                <span className="text-3xl">🎉</span>
+                <h5 className="font-black uppercase text-base text-black">
+                  কোনো পেন্ডিং একাউন্ট রিকোয়েস্ট নেই!
+                </h5>
+                <p className="text-xs font-bold text-neutral-500 max-w-md mx-auto uppercase">
+                  নতুন কেউ ওয়েবসাইটে সাইন-আপ রিকোয়েস্ট পাঠালে তা এখানে প্রদর্শিত হবে এবং আপনি তা অনুমোদন করতে পারবেন।
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {accountRequests.filter(r => r.status === 'pending').map(req => (
+                  <div
+                    key={req.id}
+                    className="border-3 border-black p-4 bg-[#FFFEEA] shadow-[4px_4px_0px_0px_#000] flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                  >
+                    <div className="space-y-2 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-base font-black uppercase text-black">
+                          {req.name}
+                        </span>
+                        <span className={`text-[10px] font-black px-2 py-0.5 border border-black uppercase ${
+                          req.requestedRole === 'admin'
+                            ? 'bg-[#D71920] text-white'
+                            : req.requestedRole === 'coach'
+                            ? 'bg-[#0084FF] text-white'
+                            : 'bg-[#22C55E] text-black'
+                        }`}>
+                          {req.requestedRole === 'admin' ? '🛡️ ADMIN REQUEST' : req.requestedRole === 'coach' ? '📋 COACH REQUEST' : '⚽ PLAYER REQUEST'}
+                        </span>
+                        <span className="text-[10px] font-bold text-neutral-500 bg-white px-2 py-0.5 border border-black uppercase">
+                          {req.submittedAt}
+                        </span>
+                      </div>
+
+                      <div className="text-xs font-bold text-neutral-700 flex items-center gap-3 flex-wrap">
+                        <span className="flex items-center gap-1">
+                          <Mail className="w-3.5 h-3.5 text-neutral-400" />
+                          <strong className="text-black">{req.email}</strong>
+                        </span>
+                        {req.requestedPosition && (
+                          <span className="bg-white px-2 py-0.5 border border-black text-[11px] font-black">
+                            পজিশন: {req.requestedPosition}
+                          </span>
+                        )}
+                        {req.requestedNumber && (
+                          <span className="bg-white px-2 py-0.5 border border-black text-[11px] font-black">
+                            জার্সি: #{req.requestedNumber}
+                          </span>
+                        )}
+                      </div>
+
+                      {req.notes && (
+                        <p className="text-xs font-bold text-neutral-600 bg-white p-2 border border-black italic">
+                          "{req.notes}"
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Action Controls: Link to squad player & Approve/Reject */}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0 border-t-2 sm:border-t-0 pt-3 sm:pt-0 border-black">
+                      {req.requestedRole === 'player' && (
+                        <div className="flex flex-col text-left">
+                          <label className="text-[9px] font-black uppercase text-neutral-600 mb-0.5">
+                            রোস্টার প্লেয়ারের সাথে লিংক:
+                          </label>
+                          <select
+                            value={selectedPlayerToLink[req.id] || ''}
+                            onChange={e => setSelectedPlayerToLink(prev => ({ ...prev, [req.id]: e.target.value }))}
+                            className="bg-white border-2 border-black p-1.5 text-xs font-bold"
+                          >
+                            <option value="">-- নতুন প্লেয়ার হিসেবে থাকবে --</option>
+                            {players.map(p => (
+                              <option key={p.id} value={p.id}>
+                                #{p.number} {p.name} ({p.position})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2 mt-2 sm:mt-0">
+                        <button
+                          type="button"
+                          onClick={() => approveAccountRequest(req.id, selectedPlayerToLink[req.id])}
+                          className="bg-[#22C55E] hover:bg-green-600 text-black border-2 border-black px-3.5 py-2 text-xs font-black uppercase shadow-[2px_2px_0px_0px_#000] active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer flex-1 sm:flex-initial"
+                          title="অনুমোদন করুন ও সক্রিয় একাউন্ট তৈরি করুন"
+                        >
+                          <Check className="w-4 h-4" />
+                          <span>অনুমোদন করুন (ACCEPT)</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const reason = window.prompt('বাতিল করার কারণ লিখুন (ঐচ্ছিক):', 'ক্লাবের শর্তাবলী পূরণ না হওয়ায়');
+                            if (reason !== null) {
+                              rejectAccountRequest(req.id, reason);
+                            }
+                          }}
+                          className="bg-[#D71920] hover:bg-red-700 text-white border-2 border-black px-3 py-2 text-xs font-black uppercase shadow-[2px_2px_0px_0px_#000] active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer flex-1 sm:flex-initial"
+                          title="আবেদন বাতিল করুন"
+                        >
+                          <X className="w-4 h-4" />
+                          <span>বাতিল (REJECT)</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Account Request History (Approved & Rejected) */}
+          <div className="bg-white border-3 border-black p-4 sm:p-5 shadow-[4px_4px_0px_0px_#000] space-y-3">
+            <h4 className="font-black uppercase text-sm text-black border-b-2 border-black pb-2">
+              আবেদনের পূর্বের ইতিহাস (REQUEST HISTORY)
+            </h4>
+
+            {accountRequests.filter(r => r.status !== 'pending').length === 0 ? (
+              <p className="text-xs font-bold text-neutral-500 uppercase">কোনো পুরনো ইতিহাস নেই।</p>
+            ) : (
+              <div className="divide-y divide-neutral-200 max-h-60 overflow-y-auto pr-1">
+                {accountRequests.filter(r => r.status !== 'pending').map(req => (
+                  <div key={req.id} className="py-2.5 flex items-center justify-between text-xs font-bold">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-black uppercase text-black">{req.name}</span>
+                        <span className="text-neutral-500">({req.email})</span>
+                        <span className={`text-[9px] font-black px-1.5 py-0.2 border border-black uppercase ${
+                          req.status === 'approved' ? 'bg-[#22C55E] text-black' : 'bg-[#D71920] text-white'
+                        }`}>
+                          {req.status === 'approved' ? 'APPROVED (গৃহীত)' : 'REJECTED (বাতিল)'}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-neutral-500">
+                        রিভিউ করেছেন: {req.reviewedBy || 'Admin'} • {req.reviewedAt}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => deleteAccountRequest(req.id)}
+                      className="text-neutral-400 hover:text-[#D71920] p-1 cursor-pointer"
+                      title="Delete from history"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          TAB: PLAYER ROSTER & ACCOUNT CONNECTION HUB
+         ======================================================== */}
+      {activeAdminTab === 'linking' && isUserAdmin && (
+        <div className="space-y-6 animate-fadeIn">
+          {/* Top Banner */}
+          <div className="bg-[#22C55E] text-black border-3 border-black p-4 sm:p-5 shadow-[4px_4px_0px_0px_#000] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="bg-black text-[#FFE600] font-black text-[10px] px-2 py-0.5 border border-black uppercase">
+                  ROSTER MAPPING
+                </span>
+                <span className="text-xs font-black uppercase text-neutral-800">
+                  PLAYER ACCOUNT CONNECT
+                </span>
+              </div>
+              <h3 className="text-lg sm:text-xl font-black uppercase text-black mt-1">
+                🔗 প্লেয়ার রোস্টার ও ইউজার একাউন্ট সংযোগ (PLAYER ACCOUNT LINKER)
+              </h3>
+              <p className="text-xs font-bold text-neutral-800 uppercase mt-0.5 max-w-2xl">
+                রোস্টারের প্রতিটি প্লেয়ার প্রোফাইলকে ক্লাবের সাইন-ইন করা একাউন্টের সাথে যুক্ত করুন। যখন প্লেয়ার তার নিজস্ব ইমেইল দিয়ে লগইন করবে, সে স্বয়ংক্রিয়ভাবে তার নিজস্ব প্রোফাইল ও স্ট্যাটস নিয়ন্ত্রণ করতে পারবে।
+              </p>
+            </div>
+
+            <div className="bg-white border-2 border-black px-3 py-1.5 text-center shadow-[2px_2px_0px_0px_#000] shrink-0">
+              <span className="text-[10px] font-black uppercase text-neutral-500 block">কানেক্টেড প্লেয়ার</span>
+              <span className="text-xl font-black text-black">
+                {players.filter(p => !!p.linkedUserId).length} / {players.length}
+              </span>
+            </div>
+          </div>
+
+          {linkingSuccess && (
+            <div className="bg-[#F0FDF4] border-2 border-[#22C55E] p-3 text-xs font-bold text-green-900 flex items-center justify-between shadow-[2px_2px_0px_0px_#000]">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-[#22C55E]" />
+                <span>{linkingSuccess}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLinkingSuccess(null)}
+                className="text-neutral-500 hover:text-black font-black"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* Players Roster Mapping Grid */}
+          <div className="bg-white border-3 border-black p-4 sm:p-5 shadow-[4px_4px_0px_0px_#000] space-y-4">
+            <div className="flex items-center justify-between border-b-2 border-black pb-3">
+              <h4 className="font-black uppercase text-sm sm:text-base text-black flex items-center gap-2">
+                <span>স্কোয়াড রোস্টার ও একাউন্ট ম্যাপিং ({players.length} PLAYERS)</span>
+              </h4>
+              <span className="text-xs font-bold text-neutral-500 uppercase">
+                {availableUsers.length} REGISTERED ACCOUNTS
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+              {players.map(player => {
+                const linkedUser = availableUsers.find(u => u.id === player.linkedUserId || u.email?.toLowerCase() === player.linkedUserEmail?.toLowerCase());
+
+                return (
+                  <div
+                    key={player.id}
+                    className={`border-3 border-black p-3.5 shadow-[3px_3px_0px_0px_#000] flex flex-col justify-between gap-3 ${
+                      player.linkedUserId ? 'bg-[#F0FDF4]' : 'bg-[#FFFEEA]'
+                    }`}
+                  >
+                    {/* Player Info Header */}
+                    <div className="flex items-start justify-between gap-2 border-b-2 border-black/20 pb-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className="w-10 h-10 border-2 border-black flex items-center justify-center font-black text-sm text-white shadow-[1px_1px_0px_0px_#000]"
+                          style={{ backgroundColor: player.avatarBg || '#22C55E' }}
+                        >
+                          #{player.number}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-black uppercase text-black">{player.name}</span>
+                            <span className="text-[10px] font-black bg-white px-1.5 py-0.2 border border-black uppercase">
+                              {player.position}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-bold text-neutral-500 uppercase block">
+                            {player.role} • GOALS: {player.stats.goals}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Connection status badge */}
+                      <span className={`text-[9px] font-black px-2 py-0.5 border border-black uppercase ${
+                        player.linkedUserId
+                          ? 'bg-[#22C55E] text-black'
+                          : 'bg-[#FFE600] text-black'
+                      }`}>
+                        {player.linkedUserId ? 'CONNECTED ✅' : 'NOT LINKED ⚠️'}
+                      </span>
+                    </div>
+
+                    {/* Linked User Display / Selector */}
+                    <div className="space-y-2">
+                      {player.linkedUserId && linkedUser ? (
+                        <div className="bg-white border-2 border-black p-2 flex items-center justify-between">
+                          <div className="text-xs font-bold">
+                            <span className="text-neutral-500 block text-[9px] uppercase font-black">যুক্ত করা একাউন্ট:</span>
+                            <span className="text-black font-black">{linkedUser.name}</span>
+                            <span className="text-neutral-600 block text-[10px]">{linkedUser.email}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              linkPlayerToUser(player.id, null);
+                              setLinkingSuccess(`'${player.name}' প্লেয়ারের একাউন্ট সংযোগ সফলভাবে বিচ্ছিন্ন করা হয়েছে।`);
+                            }}
+                            className="bg-[#FFF1F2] hover:bg-[#D71920] hover:text-white text-[#D71920] border border-black px-2 py-1 text-[10px] font-black uppercase transition-colors cursor-pointer"
+                            title="সংযোগ বিচ্ছিন্ন করুন"
+                          >
+                            UNLINK
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] font-black uppercase text-neutral-600">
+                            একটি অনুমোদিত ইউজার একাউন্ট সিলেক্ট করুন:
+                          </label>
+                          <div className="flex items-center gap-1.5">
+                            <select
+                              value={selectedUserForPlayer[player.id] || ''}
+                              onChange={e => setSelectedUserForPlayer(prev => ({ ...prev, [player.id]: e.target.value }))}
+                              className="bg-white border-2 border-black p-1.5 text-xs font-bold flex-1"
+                            >
+                              <option value="">-- একাউন্ট পছন্দ করুন --</option>
+                              {availableUsers.map(u => (
+                                <option key={u.id} value={u.id}>
+                                  {u.name} ({u.email || u.userType})
+                                </option>
+                              ))}
+                            </select>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const chosenUserId = selectedUserForPlayer[player.id];
+                                if (!chosenUserId) {
+                                  alert('দয়া করে ড্রপডাউন থেকে একটি একাউন্ট নির্বাচন করুন।');
+                                  return;
+                                }
+                                linkPlayerToUser(player.id, chosenUserId);
+                                const u = availableUsers.find(user => user.id === chosenUserId);
+                                setLinkingSuccess(`'${player.name}' সফলভাবে '${u?.email || u?.name}' একাউন্টের সাথে কানেক্ট করা হয়েছে!`);
+                              }}
+                              className="bg-[#22C55E] hover:bg-green-600 text-black border-2 border-black px-3 py-1.5 text-xs font-black uppercase shadow-[2px_2px_0px_0px_#000] active:scale-95 transition-all shrink-0 cursor-pointer"
+                            >
+                              LINK
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

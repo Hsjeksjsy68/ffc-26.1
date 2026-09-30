@@ -14,10 +14,13 @@ import { MobileBottomNav } from './components/MobileBottomNav';
 import { PhoneNotificationModal } from './components/PhoneNotificationModal';
 import { LoginModal } from './components/LoginModal';
 import { RecordPastMatchModal } from './components/RecordPastMatchModal';
-import { Flame, ShieldCheck, HeartHandshake, Lock, Database } from 'lucide-react';
+import { GatekeeperView } from './components/GatekeeperView';
+import { Flame, ShieldCheck, HeartHandshake, Lock, Database, Smartphone } from 'lucide-react';
 
 const MainContent: React.FC = () => {
   const {
+    currentUser,
+    isLoggedIn,
     selectedPlayerProfileId,
     setSelectedPlayerProfileId,
     isDataCenterOpen,
@@ -25,6 +28,7 @@ const MainContent: React.FC = () => {
     openDataCenter,
     isNotificationModalOpen,
     setIsNotificationModalOpen,
+    openNotificationModal,
     isLoginPanelOpen,
     setIsLoginPanelOpen,
     openLoginPanel,
@@ -59,6 +63,82 @@ const MainContent: React.FC = () => {
     setActiveTab(tab);
   };
 
+  // Strict Web Security Guard: If user is not logged in, enforce Gatekeeper Portal
+  if (!isLoggedIn) {
+    return <GatekeeperView />;
+  }
+
+  // Dedicated Full-Page Chat View (Separate Messenger Page)
+  if (activeTab === 'chat') {
+    return (
+      <div className="min-h-screen bg-[#F0F2F5] text-black flex flex-col justify-between selection:bg-[#FFE600] relative">
+        {/* Dedicated Chat Page Header */}
+        <div className="bg-[#0084FF] text-white border-b-3 border-black px-3 sm:px-6 py-2.5 flex items-center justify-between sticky top-0 z-30 shadow-[0_2px_10px_rgba(0,0,0,0.1)]">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={() => handleTabChange('stats')}
+              className="bg-white hover:bg-[#FFE600] text-black border-2 border-black px-3 py-1.5 text-xs font-black uppercase shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center gap-1 cursor-pointer"
+              title="Return to Club Hub"
+            >
+              <span>← CLUB HUB (ক্লাব পেজ)</span>
+            </button>
+            <div className="flex items-center gap-2">
+              <FlamehunterLogo size="xs" withShadow />
+              <div>
+                <h1 className="text-sm sm:text-base font-black uppercase text-white leading-none">
+                  FLAMEHUNTER MESSENGER
+                </h1>
+                <span className="text-[10px] font-bold text-blue-100 uppercase hidden sm:inline">
+                  DEDICATED SQUAD COMMUNICATIONS PAGE
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="hidden sm:flex items-center gap-1.5 bg-black text-[#FFE600] px-2.5 py-1 border border-black text-xs font-black uppercase">
+              <div
+                className="w-4 h-4 rounded-full border border-black flex items-center justify-center font-black text-[9px] text-white"
+                style={{ backgroundColor: currentUser.avatarBg || '#D71920' }}
+              >
+                {currentUser.name.charAt(0)}
+              </div>
+              <span>{currentUser.name} ({currentUser.userType?.toUpperCase() || 'PLAYER'})</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={openNotificationModal}
+              className="w-8 h-8 bg-white hover:bg-[#FFE600] text-black border-2 border-black flex items-center justify-center cursor-pointer shadow-[1px_1px_0px_0px_#000]"
+              title="Phone Alerts"
+            >
+              <Smartphone className="w-4 h-4 text-[#22C55E]" />
+            </button>
+          </div>
+        </div>
+
+        {/* Dedicated Full Page Chat Body */}
+        <main className="flex-1 w-full max-w-7xl mx-auto px-2 sm:px-4 py-3 sm:py-4 pb-24 md:pb-6">
+          <ChatAndGroupsView />
+        </main>
+
+        {/* Mobile Bottom Navigation */}
+        <MobileBottomNav activeTab={activeTab} setActiveTab={handleTabChange} />
+
+        {/* Global Modals */}
+        <PhoneNotificationModal
+          isOpen={isNotificationModalOpen}
+          onClose={() => setIsNotificationModalOpen(false)}
+        />
+        <LoginModal
+          isOpen={isLoginPanelOpen}
+          onClose={() => setIsLoginPanelOpen(false)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F6F7FA] text-black flex flex-col justify-between selection:bg-[#FFE600] relative">
       {/* Navigation Header */}
@@ -76,7 +156,6 @@ const MainContent: React.FC = () => {
             <>
               {activeTab === 'stats' && <PlayerStatsView />}
               {activeTab === 'schedules' && <SchedulesView onGoToAttendance={handleGoToAttendance} />}
-              {activeTab === 'chat' && <ChatAndGroupsView />}
               {activeTab === 'attendance' && <AttendanceView initialEventId={selectedAttendanceEventId} />}
               {activeTab === 'admin' && <AdminTechnicalView />}
               {activeTab === 'realtime' && (

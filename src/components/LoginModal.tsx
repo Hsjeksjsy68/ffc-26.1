@@ -29,6 +29,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
   const {
     currentUser,
     loginUser,
+    logoutUser,
     loginWithGoogle,
     loginWithEmail,
     players
@@ -757,6 +758,19 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                 className="bg-white hover:bg-[#22C55E] hover:text-black text-black border-2 border-black py-1.5 text-[10px] font-black uppercase shadow-[2px_2px_0px_0px_#000] transition-colors cursor-pointer"
               >
                 ⚽ PLAYER
+              </button>
+            </div>
+
+            <div className="pt-2 text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  logoutUser();
+                  onClose();
+                }}
+                className="w-full bg-[#FFF1F2] hover:bg-[#D71920] hover:text-white text-[#D71920] border-2 border-black py-2 text-xs font-black uppercase shadow-[2px_2px_0px_0px_#000] active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <span>🚪 LOG OUT (লগআউট করুন)</span>
               </button>
             </div>
           </div>
