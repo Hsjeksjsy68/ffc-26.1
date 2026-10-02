@@ -19,7 +19,8 @@ import {
   FineRule,
   PlayerFine,
   ClubLogoSettings,
-  AccountRequest
+  AccountRequest,
+  MediaAuditItem
 } from '../types';
 import {
   INITIAL_PLAYERS,
@@ -56,6 +57,7 @@ const COLLECTION_GROUPS = 'ffc_chat_groups';
 const COLLECTION_MESSAGES = 'ffc_chat_messages';
 const COLLECTION_SYSTEM = 'ffc_system';
 const COLLECTION_REQUESTS = 'ffc_account_requests';
+const COLLECTION_MEDIA = 'ffc_media_vault';
 
 // Check if database connection is functional
 export const isDbAvailable = (): boolean => {
@@ -324,5 +326,25 @@ export async function deleteAccountRequestFromDataCenter(id: string): Promise<vo
     await deleteDoc(doc(db, COLLECTION_REQUESTS, id));
   } catch (err) {
     console.error('[FFC DATA CENTER] Failed to delete account request:', err);
+  }
+}
+
+// Save media audit item (uploaded photos, videos, profiles, chat media)
+export async function saveMediaAuditItemToDataCenter(item: MediaAuditItem): Promise<void> {
+  if (!db) return;
+  try {
+    await setDoc(doc(db, COLLECTION_MEDIA, item.id), cleanFirestoreData(item));
+  } catch (err) {
+    console.error('[FFC DATA CENTER] Failed to save media audit item:', err);
+  }
+}
+
+// Delete media audit item
+export async function deleteMediaAuditItemFromDataCenter(id: string): Promise<void> {
+  if (!db) return;
+  try {
+    await deleteDoc(doc(db, COLLECTION_MEDIA, id));
+  } catch (err) {
+    console.error('[FFC DATA CENTER] Failed to delete media audit item:', err);
   }
 }

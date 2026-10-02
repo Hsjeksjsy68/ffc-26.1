@@ -38,6 +38,7 @@ export interface Player {
   tacticalNotes?: string;
   linkedUserId?: string;
   linkedUserEmail?: string;
+  photoUrl?: string; // Player custom photo upload
 }
 
 export interface AccountRequest {
@@ -54,6 +55,8 @@ export interface AccountRequest {
   reviewedAt?: string;
   reviewedBy?: string;
   linkedPlayerId?: string;
+  linkedCoachRole?: string; // e.g. 'Head Coach', 'Tactical Coach', 'Assistant Coach'
+  linkType?: 'player' | 'coach' | 'none';
   rejectionReason?: string;
   photoURL?: string;
   isGoogleVerified?: boolean;
@@ -163,6 +166,29 @@ export interface ChatMessage {
   reactions: Record<string, string[]>; // emoji -> [playerNames]
   isAnnouncement?: boolean;
   tacticalTag?: string;
+  mediaType?: 'image' | 'video';
+  mediaUrl?: string; // Data URL or URL
+  mediaName?: string;
+  mediaSize?: number;
+}
+
+export interface MediaAuditItem {
+  id: string;
+  type: 'image' | 'video';
+  url: string;
+  name: string;
+  size?: number; // size in bytes
+  uploadedBy: {
+    id: string;
+    name: string;
+    email?: string;
+    role?: string;
+    userType?: string;
+  };
+  destination: string; // e.g. 'Chat: Official Squad Channel', 'Player Profile: Tanvir Ahmed (#10)'
+  contextType: 'chat' | 'player_profile' | 'user_avatar' | 'club_crest' | 'matchday';
+  timestamp: string; // Formatted date time e.g. "Oct 2, 2026, 06:45 PM"
+  isoDate: string;
 }
 
 export interface ChatGroup {

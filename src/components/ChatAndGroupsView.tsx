@@ -33,7 +33,11 @@ import {
   Trash2,
   RotateCcw,
   Lock,
-  ShieldAlert
+  ShieldAlert,
+  Film,
+  Maximize2,
+  Download,
+  Image as ImageIcon
 } from 'lucide-react';
 
 export interface ChatAndGroupsViewProps {
@@ -85,9 +89,31 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const mediaFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Attached media state (photo or video before sending)
+  const [selectedMedia, setSelectedMedia] = useState<{
+    file: File;
+    type: 'image' | 'video';
+    url: string;
+    name: string;
+    size: number;
+  } | null>(null);
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+  const [previewModalMedia, setPreviewModalMedia] = useState<{
+    type: 'image' | 'video';
+    url: string;
+    name?: string;
+  } | null>(null);
+
+  const isMarcusMsg = (m: ChatMessage) => {
+    const sName = (m.senderName || '').toLowerCase();
+    const sId = (m.senderId || '').toLowerCase();
+    return sName.includes('marcus') || sName.includes('vance') || sId.includes('marcus') || sId.includes('vance');
+  };
 
   const activeGroup = chatGroups.find(g => g.id === activeGroupId) || chatGroups[0];
-  const activeMessages = chatMessages.filter(m => m.groupId === activeGroupId);
+  const activeMessages = chatMessages.filter(m => m.groupId === activeGroupId && !isMarcusMsg(m));
 
   // Scroll to bottom when messages update
   useEffect(() => {
@@ -97,16 +123,67 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
   // Standard Messenger Emojis for quick reactions
   const messengerReactions = ['❤️', '👍', '😂', '😮', '😢', '🔥', '⚽', '👏'];
 
+  const handleMediaFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const isVideo = file.type.startsWith('video/');
+    const isImage = file.type.startsWith('image/');
+
+    if (!isImage && !isVideo) {
+      setActionNotice({ type: 'error', text: '⚠️ শুধুমাত্র ছবি (Image) বা ভিডিও (Video) ফাইল নির্বাচন করুন।' });
+      return;
+    }
+
+    if (file.size > 25 * 1024 * 1024) {
+      setActionNotice({ type: 'error', text: '⚠️ ফাইলের সাইজ সর্বোচ্চ ২৫ মেগাবাইট (25MB) হতে পারবে।' });
+      return;
+    }
+
+    setIsUploadingMedia(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      setSelectedMedia({
+        file,
+        type: isVideo ? 'video' : 'image',
+        url: dataUrl,
+        name: file.name,
+        size: file.size
+      });
+      setIsUploadingMedia(false);
+    };
+    reader.onerror = () => {
+      setActionNotice({ type: 'error', text: 'ফাইল রিড করতে ব্যর্থ হয়েছে।' });
+      setIsUploadingMedia(false);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
   const handleSendMessage = (textToSend?: string) => {
     const content = textToSend !== undefined ? textToSend : inputText.trim();
-    if (!content) return;
+    if (!content && !selectedMedia) return;
 
-    sendChatMessage(activeGroupId, content, {
+    const defaultText = selectedMedia
+      ? selectedMedia.type === 'video'
+        ? '🎥 [ভিডিও বার্তা]'
+        : '📷 [ছবি শেয়ার করা হয়েছে]'
+      : '';
+
+    sendChatMessage(activeGroupId, content || defaultText, {
       isAnnouncement: isAnnouncement && (currentUser.isAdmin || currentUser.role.includes('Captain')),
-      tacticalTag: tacticalTag || undefined
+      tacticalTag: tacticalTag || undefined,
+      media: selectedMedia ? {
+        type: selectedMedia.type,
+        url: selectedMedia.url,
+        name: selectedMedia.name,
+        size: selectedMedia.size
+      } : undefined
     });
 
     setInputText('');
+    setSelectedMedia(null);
     setIsAnnouncement(false);
     setTacticalTag('');
     setShowEmojiPicker(false);
@@ -396,18 +473,26 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
                 const isProtected = group.isAdminGroup || group.isChannel || group.createdBy === 'admin' || group.createdBy === 'flamehunter_staff';
                 const canDelete = currentUser.isAdmin || (!isProtected && (group.createdBy === currentUser.id || group.createdBy === currentUser.email));
                 const lastMsg = chatMessages
-                  .filter(m => m.groupId === group.id)
+                  .filter(m => m.groupId === group.id && !isMarcusMsg(m))
                   .slice(-1)[0];
 
                 return (
-                  <button
+                  <div
                     key={group.id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => {
                       setActiveGroupId(group.id);
                       setMobileView('chat');
                     }}
-                    className={`w-full p-3 flex items-center gap-3 text-left transition-colors cursor-pointer ${
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setActiveGroupId(group.id);
+                        setMobileView('chat');
+                      }
+                    }}
+                    className={`w-full p-3 flex items-center gap-3 text-left transition-colors cursor-pointer select-none ${
                       isActive
                         ? 'bg-[#EBF5FF] border-l-4 border-[#0084FF]'
                         : 'hover:bg-[#F2F4F7]'
@@ -482,7 +567,7 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
                         </div>
                       </div>
                     </div>
-                  </button>
+                  </div>
                 );
               })
             )}
@@ -774,7 +859,7 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
                         </div>
 
                         {/* The Messenger Bubble */}
-                        {isSingleEmoji ? (
+                        {isSingleEmoji && !msg.mediaUrl ? (
                           <div className="text-4xl sm:text-5xl p-1 select-none animate-bounce-short">
                             {msg.text}
                           </div>
@@ -786,7 +871,52 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
                                 : 'bg-white text-neutral-900 rounded-2xl rounded-bl-xs'
                             }`}
                           >
-                            <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+                            {/* Attached Media (Photo / Video) */}
+                            {msg.mediaUrl && (
+                              <div className="mb-2 overflow-hidden rounded border-2 border-black bg-black/10">
+                                {msg.mediaType === 'video' ? (
+                                  <div className="relative bg-black rounded overflow-hidden">
+                                    <video
+                                      src={msg.mediaUrl}
+                                      controls
+                                      preload="metadata"
+                                      className="w-full max-h-72 object-contain rounded"
+                                    />
+                                    {msg.mediaName && (
+                                      <div className="p-1.5 bg-neutral-900 text-white text-[10px] font-mono flex items-center justify-between border-t border-neutral-700">
+                                        <span className="truncate flex items-center gap-1">
+                                          <Film className="w-3.5 h-3.5 text-[#FFE600] shrink-0" />
+                                          <span className="truncate">{msg.mediaName}</span>
+                                        </span>
+                                        {msg.mediaSize && (
+                                          <span className="text-neutral-400 shrink-0 ml-2">
+                                            {(msg.mediaSize / (1024 * 1024)).toFixed(1)} MB
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="relative group/media cursor-pointer rounded overflow-hidden border border-black bg-black">
+                                    <img
+                                      src={msg.mediaUrl}
+                                      alt={msg.mediaName || 'Uploaded photo'}
+                                      onClick={() => setPreviewModalMedia({ type: 'image', url: msg.mediaUrl!, name: msg.mediaName })}
+                                      className="w-full max-h-72 object-cover hover:scale-102 transition-transform duration-200"
+                                    />
+                                    <div
+                                      onClick={() => setPreviewModalMedia({ type: 'image', url: msg.mediaUrl!, name: msg.mediaName })}
+                                      className="absolute inset-0 bg-black/40 opacity-0 group-hover/media:opacity-100 flex items-center justify-center transition-opacity text-white font-black text-xs uppercase gap-1"
+                                    >
+                                      <Maximize2 className="w-4 h-4" />
+                                      <span>বড় করে দেখুন</span>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {msg.text && <p className="whitespace-pre-wrap break-words">{msg.text}</p>}
                           </div>
                         )}
 
@@ -899,6 +1029,43 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
               MESSENGER BOTTOM INPUT BAR (STICKY, PILL-SHAPED)
              ======================================================== */}
           <div className="shrink-0 bg-white border-t-2 sm:border-t-3 border-black p-2 sm:p-2.5">
+            {/* Selected Media Preview Tray */}
+            {selectedMedia && (
+              <div className="mb-2 bg-[#FFFEEA] border-2 border-black p-2 flex items-center justify-between gap-3 shadow-[2px_2px_0px_0px_#000] animate-fadeIn">
+                <div className="flex items-center gap-2.5 overflow-hidden">
+                  {selectedMedia.type === 'image' ? (
+                    <img
+                      src={selectedMedia.url}
+                      alt={selectedMedia.name}
+                      className="w-12 h-12 object-cover border-2 border-black shadow-[1px_1px_0px_0px_#000] shrink-0"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 bg-black text-[#FFE600] border-2 border-black flex items-center justify-center shadow-[1px_1px_0px_0px_#000] shrink-0">
+                      <Film className="w-6 h-6" />
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-black uppercase bg-[#0084FF] text-white px-1.5 py-0.5 border border-black inline-block">
+                      {selectedMedia.type === 'video' ? '🎥 ভিডিও সিলেক্টেড' : '📷 ছবি সিলেক্টেড'}
+                    </span>
+                    <p className="text-xs font-black text-black truncate mt-0.5">{selectedMedia.name}</p>
+                    <span className="text-[10px] font-bold text-neutral-500">
+                      {(selectedMedia.size / (1024 * 1024)).toFixed(2)} MB
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedMedia(null)}
+                  className="w-7 h-7 bg-white text-black hover:bg-[#D71920] hover:text-white border-2 border-black flex items-center justify-center font-black shadow-[1px_1px_0px_0px_#000] cursor-pointer"
+                  title="Remove media"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
             <form
               onSubmit={e => {
                 e.preventDefault();
@@ -906,7 +1073,16 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
               }}
               className="flex items-center gap-1.5 sm:gap-2"
             >
-              {/* Left Action Buttons (Plus menu, Photos, Mic) */}
+              {/* Hidden file input for Photo / Video attachment */}
+              <input
+                ref={mediaFileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                className="hidden"
+                onChange={handleMediaFileSelect}
+              />
+
+              {/* Left Action Buttons (Plus menu, Photos, Videos, Mic) */}
               <button
                 type="button"
                 onClick={() => setShowTacticalDrawer(!showTacticalDrawer)}
@@ -920,11 +1096,22 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
 
               <button
                 type="button"
-                onClick={handleSendPhoto}
-                className="w-8 h-8 rounded-full bg-neutral-100 hover:bg-neutral-200 text-black border-2 border-black flex items-center justify-center transition-colors cursor-pointer shrink-0 shadow-[1px_1px_0px_0px_#000]"
-                title="Send matchday photo / formation snapshot"
+                onClick={() => mediaFileInputRef.current?.click()}
+                disabled={isUploadingMedia}
+                className="w-8 h-8 rounded-full bg-neutral-100 hover:bg-blue-100 text-black border-2 border-black flex items-center justify-center transition-colors cursor-pointer shrink-0 shadow-[1px_1px_0px_0px_#000]"
+                title="ছবি আপলোড করুন (Upload Photo)"
               >
                 <Camera className="w-4 h-4 text-[#0084FF]" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => mediaFileInputRef.current?.click()}
+                disabled={isUploadingMedia}
+                className="w-8 h-8 rounded-full bg-neutral-100 hover:bg-red-100 text-black border-2 border-black flex items-center justify-center transition-colors cursor-pointer shrink-0 shadow-[1px_1px_0px_0px_#000]"
+                title="ভিডিও আপলোড করুন (Upload Video)"
+              >
+                <Video className="w-4 h-4 text-[#D71920]" />
               </button>
 
               <button
@@ -933,7 +1120,7 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
                 className="w-8 h-8 rounded-full bg-neutral-100 hover:bg-neutral-200 text-black border-2 border-black flex items-center justify-center transition-colors cursor-pointer shrink-0 shadow-[1px_1px_0px_0px_#000]"
                 title="Send Voice Note"
               >
-                <Mic className="w-4 h-4 text-[#D71920]" />
+                <Mic className="w-4 h-4 text-neutral-600" />
               </button>
 
               {/* Pill-shaped Messenger Text Input Container */}
@@ -941,7 +1128,7 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
                 <input
                   ref={inputRef}
                   type="text"
-                  placeholder="Type a message (Aa)..."
+                  placeholder={selectedMedia ? "ক্যাপশন লিখুন (ঐচ্ছিক)..." : "Type a message (Aa)..."}
                   value={inputText}
                   onChange={e => setInputText(e.target.value)}
                   className="w-full bg-[#F0F2F5] rounded-full border-2 border-black pl-3.5 pr-9 py-2 text-xs sm:text-sm font-medium text-black focus:outline-none focus:bg-white shadow-[1px_1px_0px_0px_#000]"
@@ -959,7 +1146,7 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
               </div>
 
               {/* Right Action: Messenger Thumbs Up or Blue Send Button */}
-              {inputText.trim().length > 0 ? (
+              {inputText.trim().length > 0 || selectedMedia ? (
                 <button
                   type="submit"
                   className="w-9 h-9 rounded-full bg-[#0084FF] hover:bg-blue-600 text-white border-2 border-black flex items-center justify-center transition-transform active:scale-95 shrink-0 shadow-[2px_2px_0px_0px_#000] cursor-pointer"
@@ -1179,6 +1366,53 @@ export const ChatAndGroupsView: React.FC<ChatAndGroupsViewProps> = ({ isDedicate
                 <span>হ্যাঁ, সব রিসেট করুন (RESET ALL)</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Media Lightbox Fullscreen Modal */}
+      {previewModalMedia && (
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="relative max-w-4xl max-h-[90vh] bg-black border-4 border-white shadow-[10px_10px_0px_0px_#FFE600] flex flex-col items-center justify-center p-2">
+            {/* Top Bar */}
+            <div className="w-full flex items-center justify-between pb-2 px-2 text-white">
+              <span className="text-xs font-mono font-bold text-neutral-300 truncate max-w-md">
+                {previewModalMedia.name || 'Media Asset'}
+              </span>
+              <div className="flex items-center gap-2">
+                <a
+                  href={previewModalMedia.url}
+                  download={previewModalMedia.name || 'chat_media'}
+                  className="bg-[#FFE600] hover:bg-yellow-400 text-black border border-black px-2.5 py-1 text-xs font-black uppercase flex items-center gap-1 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>ডাউনলোড</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewModalMedia(null)}
+                  className="bg-[#D71920] hover:bg-red-700 text-white border border-white px-2.5 py-1 text-xs font-black uppercase cursor-pointer"
+                >
+                  ✕ বন্ধ করুন
+                </button>
+              </div>
+            </div>
+
+            {/* Media Body */}
+            {previewModalMedia.type === 'video' ? (
+              <video
+                src={previewModalMedia.url}
+                controls
+                autoPlay
+                className="max-h-[75vh] max-w-full object-contain"
+              />
+            ) : (
+              <img
+                src={previewModalMedia.url}
+                alt={previewModalMedia.name || 'Full view'}
+                className="max-h-[75vh] max-w-full object-contain"
+              />
+            )}
           </div>
         </div>
       )}

@@ -16,7 +16,8 @@ import {
   PlayerMatchPerformance,
   MatchDetails,
   AccountRequest,
-  Position
+  Position,
+  MediaAuditItem
 } from '../types';
 import {
   INITIAL_PLAYERS,
@@ -56,9 +57,11 @@ import {
   saveFineRulesToDataCenter,
   savePlayerFinesToDataCenter,
   saveAccountRequestToDataCenter,
-  deleteAccountRequestFromDataCenter
+  deleteAccountRequestFromDataCenter,
+  saveMediaAuditItemToDataCenter,
+  deleteMediaAuditItemFromDataCenter
 } from '../lib/firestoreService';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, deleteDoc } from 'firebase/firestore';
 
 export interface UserProfile {
   id: string;
@@ -76,6 +79,7 @@ export interface UserProfile {
   photoURL?: string;
   authProvider?: 'google' | 'password' | 'pin' | 'demo';
   linkedPlayerId?: string;
+  linkedCoachRole?: string;
   status?: 'active' | 'pending' | 'disabled';
 }
 
@@ -122,10 +126,21 @@ interface ClubContextType {
     googleProfile?: { name: string; email: string; photoURL?: string };
     isAlreadyApprovedOrAdmin?: boolean;
   }>;
-  approveAccountRequest: (requestId: string, linkPlayerId?: string) => Promise<void>;
+  approveAccountRequest: (
+    requestId: string,
+    linkOption?: string | { type: 'player' | 'coach' | 'none'; targetPlayerId?: string; coachRole?: string }
+  ) => Promise<void>;
   rejectAccountRequest: (requestId: string, reason?: string) => Promise<void>;
   deleteAccountRequest: (requestId: string) => Promise<void>;
   linkPlayerToUser: (playerId: string, userId: string | null) => Promise<void>;
+  linkUserToCoach: (userId: string, coachRole: string | null) => Promise<void>;
+  updatePlayerPhoto: (playerId: string, photoDataUrl: string) => Promise<void>;
+  updateUserProfilePhoto: (photoDataUrl: string) => Promise<void>;
+
+  // Media Audit Vault (Central live media telemetry for Admin)
+  mediaAuditItems: MediaAuditItem[];
+  recordMediaUpload: (item: Omit<MediaAuditItem, 'id' | 'timestamp' | 'isoDate'>) => Promise<MediaAuditItem>;
+  deleteMediaAuditItem: (id: string) => Promise<void>;
 
   // Firebase Real Auth Integration
   firebaseUser: FirebaseUser | null;
@@ -200,7 +215,20 @@ interface ClubContextType {
   deleteChatGroup: (groupId: string) => Promise<{ success: boolean; message: string }>;
   resetAllChats: () => Promise<{ success: boolean; message: string }>;
   clearGroupMessages: (groupId: string) => Promise<{ success: boolean; message: string }>;
-  sendChatMessage: (groupId: string, text: string, options?: { isAnnouncement?: boolean; tacticalTag?: string }) => void;
+  sendChatMessage: (
+    groupId: string,
+    text: string,
+    options?: {
+      isAnnouncement?: boolean;
+      tacticalTag?: string;
+      media?: {
+        type: 'image' | 'video';
+        url: string;
+        name: string;
+        size?: number;
+      };
+    }
+  ) => void;
   reactToMessage: (messageId: string, emoji: string) => void;
 
   // Technical & Admin
@@ -322,6 +350,21 @@ export const INITIAL_AVAILABLE_USERS: UserProfile[] = [
   SUPER_ADMIN_USER
 ];
 
+export const isMarcusVance = (m: any): boolean => {
+  if (!m) return false;
+  const name = (m.senderName || '').toLowerCase();
+  const id = (m.senderId || '').toLowerCase();
+  return name.includes('marcus') || name.includes('vance') || id.includes('marcus') || id.includes('vance');
+};
+
+export const isMarcusGroup = (g: any): boolean => {
+  if (!g) return false;
+  const name = (g.name || '').toLowerCase();
+  const creator = (g.createdByName || '').toLowerCase();
+  const creatorId = (g.createdBy || '').toLowerCase();
+  return name.includes('marcus') || name.includes('vance') || creator.includes('marcus') || creator.includes('vance') || creatorId.includes('marcus') || creatorId.includes('vance');
+};
+
 // One-time auto-wipe trigger for manual entry reset & strict auth lockout
 if (typeof window !== 'undefined') {
   const SECURITY_RESET_V9 = 'flamehunter_enforce_auth_lockout_v9';
@@ -331,6 +374,18 @@ if (typeof window !== 'undefined') {
     localStorage.removeItem('flamehunter_available_users');
     localStorage.setItem(SECURITY_RESET_V9, 'true');
   }
+
+  // Purge any cached messages from Marcus Vance immediately
+  try {
+    const rawMsgs = localStorage.getItem('flamehunter_chat_messages');
+    if (rawMsgs) {
+      const parsed = JSON.parse(rawMsgs);
+      if (Array.isArray(parsed)) {
+        const cleaned = parsed.filter(m => !isMarcusVance(m));
+        localStorage.setItem('flamehunter_chat_messages', JSON.stringify(cleaned));
+      }
+    }
+  } catch {}
 }
 
 export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -356,6 +411,12 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Account creation requests state
   const [accountRequests, setAccountRequests] = useState<AccountRequest[]>(() => {
     const saved = localStorage.getItem('flamehunter_account_requests');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // Media Audit Vault (Central live media telemetry for Admin)
+  const [mediaAuditItems, setMediaAuditItems] = useState<MediaAuditItem[]>(() => {
+    const saved = localStorage.getItem('flamehunter_media_vault');
     return saved ? JSON.parse(saved) : [];
   });
 
@@ -443,44 +504,93 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   };
 
-  // Admin approves account request
-  const approveAccountRequest = async (requestId: string, linkPlayerId?: string): Promise<void> => {
+  // Admin approves account request with optional linking to Player or Coach
+  const approveAccountRequest = async (
+    requestId: string,
+    linkOption?: string | { type: 'player' | 'coach' | 'none'; targetPlayerId?: string; coachRole?: string }
+  ): Promise<void> => {
     const req = accountRequests.find(r => r.id === requestId);
     if (!req) return;
+
+    let linkType: 'player' | 'coach' | 'none' = 'none';
+    let targetPlayerId: string | undefined;
+    let coachRole: string | undefined;
+
+    if (typeof linkOption === 'string') {
+      if (linkOption) {
+        linkType = 'player';
+        targetPlayerId = linkOption;
+      }
+    } else if (linkOption) {
+      linkType = linkOption.type;
+      targetPlayerId = linkOption.targetPlayerId;
+      coachRole = linkOption.coachRole;
+    } else if (req.linkedPlayerId) {
+      linkType = 'player';
+      targetPlayerId = req.linkedPlayerId;
+    } else if (req.requestedRole === 'coach') {
+      linkType = 'coach';
+      coachRole = 'Tactical Head Coach';
+    }
 
     const updatedReq: AccountRequest = {
       ...req,
       status: 'approved',
       reviewedAt: new Date().toLocaleString(),
       reviewedBy: currentUser.name,
-      linkedPlayerId: linkPlayerId || undefined
+      linkedPlayerId: linkType === 'player' ? targetPlayerId : undefined,
+      linkedCoachRole: linkType === 'coach' ? (coachRole || 'Tactical Coach') : undefined,
+      linkType
     };
+
+    const finalUserType: UserType = (linkType === 'coach' || req.requestedRole === 'coach')
+      ? 'coach'
+      : req.requestedRole === 'admin'
+      ? 'admin'
+      : 'player';
+
+    const finalRole = linkType === 'coach'
+      ? (coachRole || 'Head Coach & Tactics Master')
+      : finalUserType === 'admin'
+      ? 'Club Administrator'
+      : 'First Team Squad Member';
 
     // Create user profile
     const newUser: UserProfile = {
       id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       name: req.name,
       email: req.email,
-      role: req.requestedRole === 'admin' ? 'Club Administrator' : req.requestedRole === 'coach' ? 'Tactical Coach' : 'Squad Player',
-      userType: req.requestedRole,
-      isAdmin: req.requestedRole === 'admin',
-      avatarBg: req.requestedRole === 'admin' ? '#D71920' : req.requestedRole === 'coach' ? '#0066B2' : '#22C55E',
-      badgeNumber: req.requestedNumber || (req.requestedRole === 'admin' ? 100 : 9),
-      department: req.requestedRole === 'admin' ? 'Board & Operations' : req.requestedRole === 'coach' ? 'Tactics & Training' : 'First Team Squad',
-      linkedPlayerId: linkPlayerId || undefined,
-      status: 'active'
+      role: finalRole,
+      userType: finalUserType,
+      isAdmin: finalUserType === 'admin',
+      avatarBg: finalUserType === 'admin' ? '#D71920' : finalUserType === 'coach' ? '#0066B2' : '#22C55E',
+      badgeNumber: req.requestedNumber || (finalUserType === 'admin' ? 100 : 9),
+      department: finalUserType === 'admin' ? 'Board & Operations' : finalUserType === 'coach' ? 'Tactics & Training' : 'First Team Squad',
+      linkedPlayerId: linkType === 'player' ? targetPlayerId : undefined,
+      linkedCoachRole: linkType === 'coach' ? (coachRole || 'Tactical Coach') : undefined,
+      status: 'active',
+      photoURL: req.photoURL
     };
 
     // If linking player, update that player in squad roster
-    if (linkPlayerId) {
+    if (linkType === 'player' && targetPlayerId) {
       setPlayers(prev => prev.map(p => {
-        if (p.id === linkPlayerId) {
-          const updatedP = { ...p, linkedUserId: newUser.id, linkedUserEmail: newUser.email };
+        if (p.id === targetPlayerId) {
+          const updatedP = {
+            ...p,
+            linkedUserId: newUser.id,
+            linkedUserEmail: newUser.email,
+            photoUrl: req.photoURL || p.photoUrl
+          };
           savePlayerToDataCenter(updatedP);
           return updatedP;
         }
         return p;
       }));
+    }
+
+    if (linkType === 'coach' && coachRole?.toLowerCase().includes('head coach')) {
+      updateTechnicalSettings({ headCoach: newUser.name });
     }
 
     setAvailableUsers(prev => {
@@ -497,7 +607,7 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     await saveAccountRequestToDataCenter(updatedReq);
-    logRealtimeEvent('ffc_account_requests', 'WRITE', `Approved account request for ${req.name} (${req.email})`);
+    logRealtimeEvent('ffc_account_requests', 'WRITE', `Approved account request for ${req.name} (${req.email}) linked as ${linkType}`);
   };
 
   // Admin rejects account request
@@ -558,7 +668,12 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (userId) {
       setAvailableUsers(prev => prev.map(u => {
         if (u.id === userId) {
-          return { ...u, linkedPlayerId: playerId };
+          return {
+            ...u,
+            linkedPlayerId: playerId,
+            linkedCoachRole: undefined,
+            userType: 'player'
+          };
         }
         if (u.linkedPlayerId === playerId) {
           return { ...u, linkedPlayerId: undefined };
@@ -575,6 +690,166 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     logRealtimeEvent('ffc_players', 'WRITE', `Linked player ${playerId} with user account ${targetUser?.email || 'unlinked'}`);
+  };
+
+  // Admin connects a User Account with Coaching Staff
+  const linkUserToCoach = async (userId: string, coachRole: string | null): Promise<void> => {
+    const targetUser = availableUsers.find(u => u.id === userId);
+    if (!targetUser) return;
+
+    const isUnlinking = coachRole === null;
+    const newRole = coachRole || 'Head Coach & Tactics Master';
+
+    setAvailableUsers(prev => prev.map(u => {
+      if (u.id === userId) {
+        return {
+          ...u,
+          userType: isUnlinking ? 'player' : 'coach',
+          role: isUnlinking ? 'Squad Member' : newRole,
+          department: isUnlinking ? 'General Squad' : 'Management & Tactics',
+          linkedCoachRole: isUnlinking ? undefined : newRole,
+          linkedPlayerId: isUnlinking ? u.linkedPlayerId : undefined
+        };
+      }
+      return u;
+    }));
+
+    if (currentUser.id === userId) {
+      const updatedCurr = {
+        ...currentUser,
+        userType: isUnlinking ? ('player' as UserType) : ('coach' as UserType),
+        role: isUnlinking ? 'Squad Member' : newRole,
+        department: isUnlinking ? 'General Squad' : 'Management & Tactics',
+        linkedCoachRole: isUnlinking ? undefined : newRole,
+        linkedPlayerId: isUnlinking ? currentUser.linkedPlayerId : undefined
+      };
+      setCurrentUser(updatedCurr);
+      localStorage.setItem('flamehunter_current_user', JSON.stringify(updatedCurr));
+    }
+
+    if (!isUnlinking && newRole.toLowerCase().includes('head coach')) {
+      updateTechnicalSettings({ headCoach: targetUser.name });
+    }
+
+    logRealtimeEvent('ffc_users', 'WRITE', `${isUnlinking ? 'Unlinked' : 'Assigned'} coach role "${newRole}" to ${targetUser.name}`);
+  };
+
+  // Record media upload across any module (chat, profile, player, etc.)
+  const recordMediaUpload = async (
+    item: Omit<MediaAuditItem, 'id' | 'timestamp' | 'isoDate'>
+  ): Promise<MediaAuditItem> => {
+    const now = new Date();
+    const formattedDate = now.toLocaleDateString('bn-BD', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+    const formattedTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const fullTimestamp = `${formattedDate}, ${formattedTime}`;
+
+    const newItem: MediaAuditItem = {
+      ...item,
+      id: `med_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: fullTimestamp,
+      isoDate: now.toISOString()
+    };
+
+    setMediaAuditItems(prev => [newItem, ...prev]);
+    localStorage.setItem('flamehunter_media_vault', JSON.stringify([newItem, ...mediaAuditItems]));
+    await saveMediaAuditItemToDataCenter(newItem);
+    logRealtimeEvent(
+      'ffc_media_vault',
+      'WRITE',
+      `New ${item.type.toUpperCase()} uploaded by ${item.uploadedBy.name} to "${item.destination}"`
+    );
+
+    return newItem;
+  };
+
+  // Delete media item from media vault
+  const deleteMediaAuditItem = async (id: string): Promise<void> => {
+    setMediaAuditItems(prev => {
+      const updated = prev.filter(m => m.id !== id);
+      localStorage.setItem('flamehunter_media_vault', JSON.stringify(updated));
+      return updated;
+    });
+    await deleteMediaAuditItemFromDataCenter(id);
+    logRealtimeEvent('ffc_media_vault', 'WRITE', `Deleted media audit item ${id}`);
+  };
+
+  // Update Player custom photo
+  const updatePlayerPhoto = async (playerId: string, photoDataUrl: string): Promise<void> => {
+    const targetPlayer = players.find(p => p.id === playerId);
+    if (!targetPlayer) return;
+
+    setPlayers(prev => prev.map(p => {
+      if (p.id === playerId) {
+        const updated = { ...p, photoUrl: photoDataUrl };
+        savePlayerToDataCenter(updated);
+        return updated;
+      }
+      return p;
+    }));
+
+    if (currentUser.linkedPlayerId === playerId) {
+      const updatedUser = { ...currentUser, photoURL: photoDataUrl };
+      setCurrentUser(updatedUser);
+      localStorage.setItem('flamehunter_current_user', JSON.stringify(updatedUser));
+      setAvailableUsers(prev => prev.map(u => u.id === currentUser.id ? updatedUser : u));
+    }
+
+    await recordMediaUpload({
+      type: 'image',
+      url: photoDataUrl,
+      name: `${targetPlayer.name.replace(/\s+/g, '_')}_profile.jpg`,
+      destination: `Player Profile: #${targetPlayer.number} ${targetPlayer.name}`,
+      contextType: 'player_profile',
+      uploadedBy: {
+        id: currentUser.id,
+        name: currentUser.name,
+        email: currentUser.email,
+        role: currentUser.role,
+        userType: currentUser.userType
+      }
+    });
+
+    logRealtimeEvent('ffc_players', 'WRITE', `Updated profile picture for #${targetPlayer.number} ${targetPlayer.name}`);
+  };
+
+  // Update User Profile Photo
+  const updateUserProfilePhoto = async (photoDataUrl: string): Promise<void> => {
+    const updatedUser = { ...currentUser, photoURL: photoDataUrl };
+    setCurrentUser(updatedUser);
+    localStorage.setItem('flamehunter_current_user', JSON.stringify(updatedUser));
+    setAvailableUsers(prev => prev.map(u => u.id === currentUser.id ? updatedUser : u));
+
+    if (currentUser.linkedPlayerId) {
+      setPlayers(prev => prev.map(p => {
+        if (p.id === currentUser.linkedPlayerId) {
+          const updated = { ...p, photoUrl: photoDataUrl };
+          savePlayerToDataCenter(updated);
+          return updated;
+        }
+        return p;
+      }));
+    }
+
+    await recordMediaUpload({
+      type: 'image',
+      url: photoDataUrl,
+      name: `${currentUser.name.replace(/\s+/g, '_')}_avatar.jpg`,
+      destination: `User Account: ${currentUser.name} (${currentUser.role})`,
+      contextType: 'user_avatar',
+      uploadedBy: {
+        id: currentUser.id,
+        name: currentUser.name,
+        email: currentUser.email,
+        role: currentUser.role,
+        userType: currentUser.userType
+      }
+    });
+
+    logRealtimeEvent('ffc_users', 'WRITE', `Updated profile photo for ${currentUser.name}`);
   };
 
   const loginWithGoogle = async (): Promise<UserProfile> => {
@@ -923,17 +1198,25 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Chat Groups & Messages
   const [chatGroups, setChatGroups] = useState<ChatGroup[]>(() => {
     const saved = localStorage.getItem('flamehunter_chat_groups');
-    return saved ? JSON.parse(saved) : INITIAL_CHAT_GROUPS;
+    if (!saved) return INITIAL_CHAT_GROUPS;
+    try {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed.filter(g => !isMarcusGroup(g)) : INITIAL_CHAT_GROUPS;
+    } catch {
+      return INITIAL_CHAT_GROUPS;
+    }
   });
 
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
     const saved = localStorage.getItem('flamehunter_chat_messages');
-    return saved ? JSON.parse(saved) : INITIAL_CHATMESSAGES();
+    if (!saved) return INITIAL_CHAT_MESSAGES;
+    try {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed.filter(m => !isMarcusVance(m)) : INITIAL_CHAT_MESSAGES;
+    } catch {
+      return INITIAL_CHAT_MESSAGES;
+    }
   });
-
-  function INITIAL_CHATMESSAGES() {
-    return INITIAL_CHAT_MESSAGES;
-  }
 
   // Technical & Fines
   const [technicalSettings, setTechnicalSettings] = useState<TechnicalSettings>(() => {
@@ -1074,7 +1357,14 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 4. Chat Groups Stream
     const unsubGroups = onSnapshot(collection(db, 'ffc_chat_groups'), (snap) => {
       const fetched: ChatGroup[] = [];
-      snap.forEach(docSnap => fetched.push(docSnap.data() as ChatGroup));
+      snap.forEach(docSnap => {
+        const g = docSnap.data() as ChatGroup;
+        if (isMarcusGroup(g)) {
+          deleteDoc(docSnap.ref).catch(() => {});
+          return;
+        }
+        fetched.push(g);
+      });
       if (fetched.length > 0) {
         setChatGroups(fetched);
         localStorage.setItem('flamehunter_chat_groups', JSON.stringify(fetched));
@@ -1087,7 +1377,15 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 5. Chat Messages Stream
     const unsubMessages = onSnapshot(collection(db, 'ffc_chat_messages'), (snap) => {
       const fetched: ChatMessage[] = [];
-      snap.forEach(docSnap => fetched.push(docSnap.data() as ChatMessage));
+      snap.forEach(docSnap => {
+        const msg = docSnap.data() as ChatMessage;
+        if (isMarcusVance(msg)) {
+          // Permanently delete Marcus Vance mock messages from Firestore database
+          deleteDoc(docSnap.ref).catch(() => {});
+          return;
+        }
+        fetched.push(msg);
+      });
       fetched.sort((a, b) => a.id.localeCompare(b.id));
       setChatMessages(fetched);
       localStorage.setItem('flamehunter_chat_messages', JSON.stringify(fetched));
@@ -1134,6 +1432,20 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
+    // 7. Media Vault Stream
+    const unsubMedia = onSnapshot(collection(db, 'ffc_media_vault'), (snap) => {
+      const fetched: MediaAuditItem[] = [];
+      snap.forEach(docSnap => fetched.push(docSnap.data() as MediaAuditItem));
+      fetched.sort((a, b) => (b.isoDate || '').localeCompare(a.isoDate || ''));
+      setMediaAuditItems(fetched);
+      localStorage.setItem('flamehunter_media_vault', JSON.stringify(fetched));
+      logRealtimeEvent('ffc_media_vault', 'SYNC', `Live stream synced: ${fetched.length} media vault assets`, fetched.length);
+    }, (err: any) => {
+      if (err?.code !== 'unavailable') {
+        console.warn('[FFC DATA CENTER] Media vault stream notice:', err);
+      }
+    });
+
     return () => {
       unsubPlayers();
       unsubEvents();
@@ -1142,6 +1454,7 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
       unsubMessages();
       unsubSystem();
       unsubRequests();
+      unsubMedia();
     };
   }, []);
 
@@ -1832,7 +2145,21 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true, message: '✅ এই চ্যাটের সমস্ত মেসেজ মুছে ফেলা হয়েছে।' };
   };
 
-  const sendChatMessage = (groupId: string, text: string, options?: { isAnnouncement?: boolean; tacticalTag?: string }) => {
+  const sendChatMessage = (
+    groupId: string,
+    text: string,
+    options?: {
+      isAnnouncement?: boolean;
+      tacticalTag?: string;
+      media?: {
+        type: 'image' | 'video';
+        url: string;
+        name: string;
+        size?: number;
+      };
+    }
+  ) => {
+    const targetGroup = chatGroups.find(g => g.id === groupId);
     const newMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
       groupId,
@@ -1843,18 +2170,44 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
       timestamp: 'Just now',
       reactions: {},
       ...(options?.isAnnouncement !== undefined ? { isAnnouncement: options.isAnnouncement } : {}),
-      ...(options?.tacticalTag ? { tacticalTag: options.tacticalTag } : {})
+      ...(options?.tacticalTag ? { tacticalTag: options.tacticalTag } : {}),
+      ...(options?.media
+        ? {
+            mediaType: options.media.type,
+            mediaUrl: options.media.url,
+            mediaName: options.media.name,
+            mediaSize: options.media.size
+          }
+        : {})
     };
     setChatMessages(prev => [...prev, newMsg]);
     saveChatMessageToDataCenter(newMsg).catch(console.error);
 
+    // If message includes media, record to Media Audit Vault
+    if (options?.media) {
+      recordMediaUpload({
+        type: options.media.type,
+        url: options.media.url,
+        name: options.media.name,
+        size: options.media.size,
+        destination: `চ্যাট: ${targetGroup?.name || groupId}`,
+        contextType: 'chat',
+        uploadedBy: {
+          id: currentUser.id,
+          name: currentUser.name,
+          email: currentUser.email,
+          role: currentUser.role,
+          userType: currentUser.userType
+        }
+      }).catch(console.error);
+    }
+
     // Send instant phone push notification (chime + vibration + on-screen banner)
-    const targetGroup = chatGroups.find(g => g.id === groupId);
     sendPhonePushAlert({
       title: targetGroup ? targetGroup.name : 'Flamehunter FC Team Chat',
       senderName: currentUser.name,
       senderRole: currentUser.role,
-      text,
+      text: options?.media ? `[${options.media.type.toUpperCase()}] ${text || options.media.name}` : text,
       avatarBg: currentUser.avatarBg,
       channelName: targetGroup?.name
     });
@@ -2037,6 +2390,12 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
         rejectAccountRequest,
         deleteAccountRequest,
         linkPlayerToUser,
+        linkUserToCoach,
+        updatePlayerPhoto,
+        updateUserProfilePhoto,
+        mediaAuditItems,
+        recordMediaUpload,
+        deleteMediaAuditItem,
         firebaseUser,
         authLoading,
         loginWithGoogle,

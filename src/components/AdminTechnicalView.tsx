@@ -55,13 +55,17 @@ export const AdminTechnicalView: React.FC = () => {
     rejectAccountRequest,
     deleteAccountRequest,
     linkPlayerToUser,
+    linkUserToCoach,
     availableUsers
   } = useClub();
 
   const [activeAdminTab, setActiveAdminTab] = useState<'tactics' | 'accounts' | 'linking' | 'fines' | 'logo' | 'settings'>('tactics');
   const [selectedSlotKey, setSelectedSlotKey] = useState<string | null>(null);
   const [selectedPlayerToLink, setSelectedPlayerToLink] = useState<Record<string, string>>({});
+  const [selectedLinkTypeForReq, setSelectedLinkTypeForReq] = useState<Record<string, 'player' | 'coach' | 'none'>>({});
+  const [selectedCoachRoleForReq, setSelectedCoachRoleForReq] = useState<Record<string, string>>({});
   const [selectedUserForPlayer, setSelectedUserForPlayer] = useState<Record<string, string>>({});
+  const [selectedCoachForUser, setSelectedCoachForUser] = useState<Record<string, string>>({});
   const [linkingSuccess, setLinkingSuccess] = useState<string | null>(null);
 
   // Drag & free player positioning state
@@ -1783,17 +1787,54 @@ export const AdminTechnicalView: React.FC = () => {
                       )}
                     </div>
 
-                    {/* Action Controls: Link to squad player & Approve/Reject */}
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0 border-t-2 sm:border-t-0 pt-3 sm:pt-0 border-black">
-                      {req.requestedRole === 'player' && (
-                        <div className="flex flex-col text-left">
-                          <label className="text-[9px] font-black uppercase text-neutral-600 mb-0.5">
-                            রোস্টার প্লেয়ারের সাথে লিংক:
-                          </label>
+                    {/* Action Controls: Link to Player OR Coach & Approve/Reject */}
+                    <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 shrink-0 border-t-2 sm:border-t-0 pt-3 sm:pt-0 border-black bg-neutral-50 p-2.5 border sm:border-2">
+                      <div className="flex flex-col text-left space-y-1">
+                        <label className="text-[9px] font-black uppercase text-neutral-600">
+                          একাউন্ট রোল ও লিঙ্ক অপশন:
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedLinkTypeForReq(prev => ({ ...prev, [req.id]: 'player' }))}
+                            className={`px-2 py-1 text-[10px] font-black uppercase border border-black cursor-pointer ${
+                              (selectedLinkTypeForReq[req.id] || (req.requestedRole === 'coach' ? 'coach' : 'player')) === 'player'
+                                ? 'bg-[#22C55E] text-black shadow-[1px_1px_0px_0px_#000]'
+                                : 'bg-white text-neutral-600 hover:bg-neutral-100'
+                            }`}
+                          >
+                            ⚽ প্লেয়ার
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedLinkTypeForReq(prev => ({ ...prev, [req.id]: 'coach' }))}
+                            className={`px-2 py-1 text-[10px] font-black uppercase border border-black cursor-pointer ${
+                              (selectedLinkTypeForReq[req.id] || (req.requestedRole === 'coach' ? 'coach' : 'player')) === 'coach'
+                                ? 'bg-[#0066B2] text-white shadow-[1px_1px_0px_0px_#000]'
+                                : 'bg-white text-neutral-600 hover:bg-neutral-100'
+                            }`}
+                          >
+                            📋 কোচ
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedLinkTypeForReq(prev => ({ ...prev, [req.id]: 'none' }))}
+                            className={`px-2 py-1 text-[10px] font-black uppercase border border-black cursor-pointer ${
+                              selectedLinkTypeForReq[req.id] === 'none'
+                                ? 'bg-black text-white shadow-[1px_1px_0px_0px_#000]'
+                                : 'bg-white text-neutral-600 hover:bg-neutral-100'
+                            }`}
+                          >
+                            👤 সাধারণ
+                          </button>
+                        </div>
+
+                        {/* Player Selection Dropdown */}
+                        {(selectedLinkTypeForReq[req.id] || (req.requestedRole === 'coach' ? 'coach' : 'player')) === 'player' && (
                           <select
                             value={selectedPlayerToLink[req.id] || ''}
                             onChange={e => setSelectedPlayerToLink(prev => ({ ...prev, [req.id]: e.target.value }))}
-                            className="bg-white border-2 border-black p-1.5 text-xs font-bold"
+                            className="bg-white border-2 border-black p-1 text-xs font-bold mt-1"
                           >
                             <option value="">-- নতুন প্লেয়ার হিসেবে থাকবে --</option>
                             {players.map(p => (
@@ -1802,15 +1843,37 @@ export const AdminTechnicalView: React.FC = () => {
                               </option>
                             ))}
                           </select>
-                        </div>
-                      )}
+                        )}
 
-                      <div className="flex items-center gap-2 mt-2 sm:mt-0">
+                        {/* Coach Role Selection Dropdown */}
+                        {(selectedLinkTypeForReq[req.id] || (req.requestedRole === 'coach' ? 'coach' : 'player')) === 'coach' && (
+                          <select
+                            value={selectedCoachRoleForReq[req.id] || 'Tactical Head Coach'}
+                            onChange={e => setSelectedCoachRoleForReq(prev => ({ ...prev, [req.id]: e.target.value }))}
+                            className="bg-white border-2 border-black p-1 text-xs font-bold mt-1"
+                          >
+                            <option value="Tactical Head Coach">Tactical Head Coach (হেড কোচ)</option>
+                            <option value="Assistant Tactical Coach">Assistant Tactical Coach (সহকারী কোচ)</option>
+                            <option value="Goalkeeping Specialist Coach">Goalkeeping Coach (গোলকিপিং কোচ)</option>
+                            <option value="Fitness & Conditioning Coach">Fitness & Conditioning Coach (ফিটনেস কোচ)</option>
+                            <option value="Youth Academy Director">Youth Academy Coach</option>
+                          </select>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 mt-2 lg:mt-0">
                         <button
                           type="button"
-                          onClick={() => approveAccountRequest(req.id, selectedPlayerToLink[req.id])}
+                          onClick={() => {
+                            const effectiveLinkType = selectedLinkTypeForReq[req.id] || (req.requestedRole === 'coach' ? 'coach' : 'player');
+                            approveAccountRequest(req.id, {
+                              type: effectiveLinkType,
+                              targetPlayerId: selectedPlayerToLink[req.id],
+                              coachRole: selectedCoachRoleForReq[req.id] || (effectiveLinkType === 'coach' ? 'Tactical Head Coach' : undefined)
+                            });
+                          }}
                           className="bg-[#22C55E] hover:bg-green-600 text-black border-2 border-black px-3.5 py-2 text-xs font-black uppercase shadow-[2px_2px_0px_0px_#000] active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer flex-1 sm:flex-initial"
-                          title="অনুমোদন করুন ও সক্রিয় একাউন্ট তৈরি করুন"
+                          title="অনুমোদন করুন ও লিঙ্ক করুন"
                         >
                           <Check className="w-4 h-4" />
                           <span>অনুমোদন করুন (ACCEPT)</span>
@@ -2038,6 +2101,120 @@ export const AdminTechnicalView: React.FC = () => {
                               className="bg-[#22C55E] hover:bg-green-600 text-black border-2 border-black px-3 py-1.5 text-xs font-black uppercase shadow-[2px_2px_0px_0px_#000] active:scale-95 transition-all shrink-0 cursor-pointer"
                             >
                               LINK
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Coaching Staff Mapping Section */}
+          <div className="bg-white border-3 border-black p-4 sm:p-5 shadow-[4px_4px_0px_0px_#000] space-y-4">
+            <div className="flex items-center justify-between border-b-2 border-black pb-3">
+              <h4 className="font-black uppercase text-sm sm:text-base text-black flex items-center gap-2">
+                <span>📋 কোচিং স্টাফ ও টেকনিক্যাল ডিরেকশন সংযোগ (COACHING STAFF LINKING)</span>
+              </h4>
+              <span className="text-xs font-bold text-neutral-500 uppercase">
+                {availableUsers.filter(u => u.userType === 'coach').length} ACTIVE COACHES
+              </span>
+            </div>
+
+            <p className="text-xs font-bold text-neutral-600">
+              ক্লাবের যেকোনো অনুমোদিত ইউজার একাউন্টকে ট্যাকটিক্যাল হেড কোচ বা অন্যান্য কোচিং স্টাফ রোলে যুক্ত করুন বা পরিবর্তন করুন।
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+              {availableUsers.map(user => {
+                const isCoach = user.userType === 'coach';
+
+                return (
+                  <div
+                    key={user.id}
+                    className={`border-3 border-black p-3.5 shadow-[3px_3px_0px_0px_#000] flex flex-col justify-between gap-3 ${
+                      isCoach ? 'bg-[#EFF6FF]' : 'bg-white'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2 border-b-2 border-black/20 pb-2">
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className="w-10 h-10 border-2 border-black flex items-center justify-center font-black text-sm text-white shadow-[1px_1px_0px_0px_#000]"
+                          style={{ backgroundColor: user.avatarBg || (isCoach ? '#0066B2' : '#22C55E') }}
+                        >
+                          {user.name.charAt(0)}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-black uppercase text-black">{user.name}</span>
+                            <span className={`text-[9px] font-black px-1.5 py-0.2 border border-black uppercase ${
+                              isCoach ? 'bg-[#0066B2] text-white' : 'bg-neutral-100 text-neutral-700'
+                            }`}>
+                              {user.userType?.toUpperCase() || 'MEMBER'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-bold text-neutral-500 block">
+                            {user.email}
+                          </span>
+                        </div>
+                      </div>
+
+                      <span className={`text-[9px] font-black px-2 py-0.5 border border-black uppercase ${
+                        isCoach ? 'bg-[#0066B2] text-white' : 'bg-neutral-200 text-neutral-600'
+                      }`}>
+                        {isCoach ? 'COACH STAFF 📋' : 'NOT COACH'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2">
+                      {isCoach ? (
+                        <div className="bg-white border-2 border-black p-2 flex items-center justify-between">
+                          <div className="text-xs font-bold">
+                            <span className="text-neutral-500 block text-[9px] uppercase font-black">নিযুক্ত কোচিং পদবী:</span>
+                            <span className="text-[#0066B2] font-black">{user.role}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              linkUserToCoach(user.id, null);
+                              setLinkingSuccess(`'${user.name}'-এর কোচ পদবী সফলভাবে সরানো হয়েছে।`);
+                            }}
+                            className="bg-[#FFF1F2] hover:bg-[#D71920] hover:text-white text-[#D71920] border border-black px-2 py-1 text-[10px] font-black uppercase transition-colors cursor-pointer"
+                            title="Remove coach role"
+                          >
+                            UNLINK COACH
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] font-black uppercase text-neutral-600">
+                            কোচিং পদবী নির্বাচন করুন:
+                          </label>
+                          <div className="flex items-center gap-1.5">
+                            <select
+                              value={selectedCoachForUser[user.id] || 'Tactical Head Coach'}
+                              onChange={e => setSelectedCoachForUser(prev => ({ ...prev, [user.id]: e.target.value }))}
+                              className="bg-white border-2 border-black p-1.5 text-xs font-bold flex-1"
+                            >
+                              <option value="Tactical Head Coach">Tactical Head Coach (হেড কোচ)</option>
+                              <option value="Assistant Tactical Coach">Assistant Tactical Coach (সহকারী কোচ)</option>
+                              <option value="Goalkeeping Specialist Coach">Goalkeeping Specialist (গোলকিপার কোচ)</option>
+                              <option value="Fitness & Conditioning Coach">Fitness & Conditioning Coach (ফিটনেস কোচ)</option>
+                              <option value="Youth Academy Director">Youth Academy Director</option>
+                            </select>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const role = selectedCoachForUser[user.id] || 'Tactical Head Coach';
+                                linkUserToCoach(user.id, role);
+                                setLinkingSuccess(`'${user.name}' সফলভাবে '${role}' হিসেবে নিযুক্ত হয়েছে!`);
+                              }}
+                              className="bg-[#0066B2] hover:bg-blue-700 text-white border-2 border-black px-3 py-1.5 text-xs font-black uppercase shadow-[2px_2px_0px_0px_#000] active:scale-95 transition-all shrink-0 cursor-pointer"
+                            >
+                              MAKE COACH
                             </button>
                           </div>
                         </div>

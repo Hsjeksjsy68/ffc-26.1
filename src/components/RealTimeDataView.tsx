@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useClub } from '../context/ClubContext';
 import { db, firebaseConfig } from '../lib/firebase';
+import { MediaAuditItem } from '../types';
 import {
   Activity,
   Database,
@@ -20,7 +21,19 @@ import {
   Trophy,
   Flame,
   ArrowRight,
-  Lock
+  Lock,
+  Camera,
+  Film,
+  Download,
+  Trash2,
+  Maximize2,
+  Eye,
+  Search,
+  Filter,
+  Clock,
+  User,
+  MapPin,
+  X
 } from 'lucide-react';
 
 export const RealTimeDataView: React.FC = () => {
@@ -40,7 +53,9 @@ export const RealTimeDataView: React.FC = () => {
     clubLogo,
     syncWithDataCenter,
     currentUser,
-    canAccessLiveData
+    canAccessLiveData,
+    mediaAuditItems,
+    deleteMediaAuditItem
   } = useClub();
 
   if (!canAccessLiveData) {
@@ -57,13 +72,19 @@ export const RealTimeDataView: React.FC = () => {
     );
   }
 
-  const [activeCollection, setActiveCollection] = useState<'players' | 'events' | 'attendance' | 'messages' | 'groups' | 'system'>('players');
+  const [activeCollection, setActiveCollection] = useState<'players' | 'events' | 'attendance' | 'messages' | 'groups' | 'system' | 'media'>('players');
   const [viewMode, setViewMode] = useState<'cards' | 'json'>('cards');
   const [copied, setCopied] = useState(false);
   const [isPinging, setIsPinging] = useState(false);
   const [isSimulatingGoal, setIsSimulatingGoal] = useState(false);
   const [testResultFeedback, setTestResultFeedback] = useState<string | null>(null);
   const [latencyMs, setLatencyMs] = useState<number>(24);
+
+  // Media Audit Vault states
+  const [mediaFilter, setMediaFilter] = useState<'all' | 'image' | 'video' | 'chat' | 'profile'>('all');
+  const [mediaSearchQuery, setMediaSearchQuery] = useState('');
+  const [selectedPreviewMedia, setSelectedPreviewMedia] = useState<MediaAuditItem | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   // Measure simulated ping latency periodically
   useEffect(() => {
@@ -118,6 +139,8 @@ export const RealTimeDataView: React.FC = () => {
         return chatGroups;
       case 'system':
         return { technicalSettings, clubLogo };
+      case 'media':
+        return mediaAuditItems;
       default:
         return players;
     }
@@ -221,7 +244,7 @@ export const RealTimeDataView: React.FC = () => {
       </div>
 
       {/* Real-time Listeners Status Cards Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
         <div
           onClick={() => setActiveCollection('players')}
           className={`cursor-pointer p-3 border-3 border-black transition-all ${
@@ -238,7 +261,7 @@ export const RealTimeDataView: React.FC = () => {
             <span className="w-2 h-2 rounded-full bg-[#22C55E]" />
           </div>
           <div className="text-2xl font-black mt-2">{players.length}</div>
-          <div className="text-[10px] font-bold opacity-80 uppercase tracking-tight">`ffc_players` collection</div>
+          <div className="text-[10px] font-bold opacity-80 uppercase tracking-tight">`ffc_players`</div>
         </div>
 
         <div
@@ -257,7 +280,7 @@ export const RealTimeDataView: React.FC = () => {
             <span className="w-2 h-2 rounded-full bg-[#22C55E]" />
           </div>
           <div className="text-2xl font-black mt-2">{events.length}</div>
-          <div className="text-[10px] font-bold opacity-80 uppercase tracking-tight">`ffc_events` collection</div>
+          <div className="text-[10px] font-bold opacity-80 uppercase tracking-tight">`ffc_events`</div>
         </div>
 
         <div
@@ -276,7 +299,7 @@ export const RealTimeDataView: React.FC = () => {
             <span className="w-2 h-2 rounded-full bg-[#22C55E]" />
           </div>
           <div className="text-2xl font-black mt-2">{attendanceRecords.length}</div>
-          <div className="text-[10px] font-bold opacity-80 uppercase tracking-tight">`ffc_attendance` collection</div>
+          <div className="text-[10px] font-bold opacity-80 uppercase tracking-tight">`ffc_attendance`</div>
         </div>
 
         <div
@@ -333,7 +356,26 @@ export const RealTimeDataView: React.FC = () => {
             <span className="w-2 h-2 rounded-full bg-[#22C55E]" />
           </div>
           <div className="text-2xl font-black mt-2">ACTIVE</div>
-          <div className="text-[10px] font-bold opacity-80 uppercase tracking-tight">`ffc_system` settings</div>
+          <div className="text-[10px] font-bold opacity-80 uppercase tracking-tight">`ffc_system`</div>
+        </div>
+
+        <div
+          onClick={() => setActiveCollection('media')}
+          className={`cursor-pointer p-3 border-3 border-black transition-all ${
+            activeCollection === 'media'
+              ? 'bg-[#FF4500] text-white shadow-[4px_4px_0px_0px_#000]'
+              : 'bg-white text-black hover:bg-[#F6F5EE] shadow-[2px_2px_0px_0px_#000]'
+          }`}
+        >
+          <div className="flex items-center justify-between text-xs font-black uppercase">
+            <span className="flex items-center gap-1">
+              <Camera className="w-4 h-4" />
+              <span>MEDIA VAULT</span>
+            </span>
+            <span className="w-2 h-2 rounded-full bg-[#FFE600]" />
+          </div>
+          <div className="text-2xl font-black mt-2">{mediaAuditItems.length}</div>
+          <div className="text-[10px] font-bold opacity-80 uppercase tracking-tight">`ffc_media_vault`</div>
         </div>
       </div>
 
@@ -354,6 +396,7 @@ export const RealTimeDataView: React.FC = () => {
                   {activeCollection === 'messages' && 'ffc_chat_messages'}
                   {activeCollection === 'groups' && 'ffc_chat_groups'}
                   {activeCollection === 'system' && 'ffc_system'}
+                  {activeCollection === 'media' && 'ffc_media_vault'}
                 </span>
               </h3>
             </div>
@@ -549,6 +592,288 @@ export const RealTimeDataView: React.FC = () => {
                   </div>
                 </div>
               )}
+
+              {/* ========================================================
+                  MEDIA VAULT & LIVE AUDIT EXPLORER (ADMIN LIVE DATA)
+                 ======================================================== */}
+              {activeCollection === 'media' && (
+                <div className="space-y-4">
+                  {/* Media Vault Banner & Control Filter Bar */}
+                  <div className="bg-[#FFFEEA] border-2 border-black p-3.5 space-y-3 shadow-[2px_2px_0px_0px_#000]">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <span className="text-[10px] font-black uppercase text-[#D71920] tracking-wider block">
+                          CENTRAL LIVE MEDIA VAULT & TELEMETRY AUDIT
+                        </span>
+                        <h4 className="text-sm font-black uppercase text-black">
+                          গ্লোবাল ক্লাউড মিডিয়া অডিট ও ডিজিটাল ভল্ট
+                        </h4>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs font-black">
+                        <span className="bg-black text-[#FFE600] px-2 py-0.5 border border-black">
+                          মোট: {mediaAuditItems.length} ফাইল
+                        </span>
+                        <span className="bg-[#0066B2] text-white px-2 py-0.5 border border-black">
+                          📷 {mediaAuditItems.filter(m => m.type === 'image').length}
+                        </span>
+                        <span className="bg-[#D71920] text-white px-2 py-0.5 border border-black">
+                          🎥 {mediaAuditItems.filter(m => m.type === 'video').length}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Filter Pills & Search */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-black/20">
+                      {/* Filter Pills */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => setMediaFilter('all')}
+                          className={`px-2 py-1 text-[10px] font-black uppercase border border-black cursor-pointer ${
+                            mediaFilter === 'all'
+                              ? 'bg-black text-[#FFE600] shadow-[1px_1px_0px_0px_#000]'
+                              : 'bg-white text-black hover:bg-neutral-100'
+                          }`}
+                        >
+                          সব মিডিয়া ({mediaAuditItems.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMediaFilter('image')}
+                          className={`px-2 py-1 text-[10px] font-black uppercase border border-black cursor-pointer ${
+                            mediaFilter === 'image'
+                              ? 'bg-[#0066B2] text-white shadow-[1px_1px_0px_0px_#000]'
+                              : 'bg-white text-black hover:bg-neutral-100'
+                          }`}
+                        >
+                          📷 ছবি ({mediaAuditItems.filter(m => m.type === 'image').length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMediaFilter('video')}
+                          className={`px-2 py-1 text-[10px] font-black uppercase border border-black cursor-pointer ${
+                            mediaFilter === 'video'
+                              ? 'bg-[#D71920] text-white shadow-[1px_1px_0px_0px_#000]'
+                              : 'bg-white text-black hover:bg-neutral-100'
+                          }`}
+                        >
+                          🎥 ভিডিও ({mediaAuditItems.filter(m => m.type === 'video').length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMediaFilter('chat')}
+                          className={`px-2 py-1 text-[10px] font-black uppercase border border-black cursor-pointer ${
+                            mediaFilter === 'chat'
+                              ? 'bg-[#22C55E] text-black shadow-[1px_1px_0px_0px_#000]'
+                              : 'bg-white text-black hover:bg-neutral-100'
+                          }`}
+                        >
+                          💬 চ্যাট মিডিয়া ({mediaAuditItems.filter(m => m.contextType === 'chat').length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMediaFilter('profile')}
+                          className={`px-2 py-1 text-[10px] font-black uppercase border border-black cursor-pointer ${
+                            mediaFilter === 'profile'
+                              ? 'bg-[#FFE600] text-black shadow-[1px_1px_0px_0px_#000]'
+                              : 'bg-white text-black hover:bg-neutral-100'
+                          }`}
+                        >
+                          👤 প্রোফাইল/প্লেয়ার ({mediaAuditItems.filter(m => m.contextType === 'player_profile' || m.contextType === 'user_avatar').length})
+                        </button>
+                      </div>
+
+                      {/* Search Input */}
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-500" />
+                        <input
+                          type="text"
+                          placeholder="আপলোডার বা লোকেশন খুঁজুন..."
+                          value={mediaSearchQuery}
+                          onChange={e => setMediaSearchQuery(e.target.value)}
+                          className="bg-white border-2 border-black pl-8 pr-3 py-1 text-xs font-bold text-black focus:outline-none w-full sm:w-56"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Filtered Media List */}
+                  {(() => {
+                    const filtered = mediaAuditItems.filter(item => {
+                      if (mediaFilter === 'image' && item.type !== 'image') return false;
+                      if (mediaFilter === 'video' && item.type !== 'video') return false;
+                      if (mediaFilter === 'chat' && item.contextType !== 'chat') return false;
+                      if (mediaFilter === 'profile' && !['player_profile', 'user_avatar'].includes(item.contextType)) return false;
+
+                      if (mediaSearchQuery.trim()) {
+                        const q = mediaSearchQuery.toLowerCase();
+                        const nameMatch = item.name.toLowerCase().includes(q);
+                        const uploaderMatch = item.uploadedBy.name.toLowerCase().includes(q) || (item.uploadedBy.email || '').toLowerCase().includes(q);
+                        const destMatch = item.destination.toLowerCase().includes(q);
+                        return nameMatch || uploaderMatch || destMatch;
+                      }
+                      return true;
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="bg-white border-2 border-black p-8 text-center shadow-[2px_2px_0px_0px_#000]">
+                          <div className="w-12 h-12 rounded-full bg-neutral-100 border-2 border-black flex items-center justify-center mx-auto mb-2">
+                            <Camera className="w-6 h-6 text-neutral-400" />
+                          </div>
+                          <h5 className="font-black text-sm uppercase text-black">কোনো মিডিয়া ফাইল পাওয়া যায়নি</h5>
+                          <p className="text-xs font-bold text-neutral-500 mt-1">
+                            চ্যাটে ফটো/ভিডিও শেয়ার করলে বা প্লেয়ার প্রোফাইল ছবি আপলোড করলে লাইভ এখানে অডিট হিসেবে সংরক্ষিত হবে।
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                        {filtered.map(item => (
+                          <div
+                            key={item.id}
+                            className="bg-white border-2 border-black p-3 shadow-[3px_3px_0px_0px_#000] flex flex-col justify-between gap-3 hover:translate-x-0.5 hover:translate-y-0.5 transition-transform"
+                          >
+                            {/* Top Details & Context Badges */}
+                            <div>
+                              <div className="flex items-center justify-between gap-2 mb-2">
+                                <span className={`text-[10px] font-black px-2 py-0.5 border border-black uppercase flex items-center gap-1 ${
+                                  item.type === 'video' ? 'bg-[#D71920] text-white' : 'bg-[#0066B2] text-white'
+                                }`}>
+                                  {item.type === 'video' ? <Film className="w-3 h-3" /> : <Camera className="w-3 h-3" />}
+                                  <span>{item.type === 'video' ? 'ভিডিও ফাইল' : 'ছবি'}</span>
+                                </span>
+
+                                <span className="text-[10px] font-black bg-[#FFE600] text-black px-2 py-0.5 border border-black uppercase">
+                                  {item.contextType === 'chat'
+                                    ? '💬 চ্যাট মেসেজ'
+                                    : item.contextType === 'player_profile'
+                                    ? '⚽ প্লেয়ার প্রোফাইল'
+                                    : '👤 অ্যাকাউন্ট অবতার'}
+                                </span>
+                              </div>
+
+                              {/* Media Thumbnail / Preview Box */}
+                              <div className="relative border-2 border-black bg-black rounded overflow-hidden aspect-video flex items-center justify-center group mb-2.5">
+                                {item.type === 'video' ? (
+                                  <video
+                                    src={item.url}
+                                    controls
+                                    preload="metadata"
+                                    className="w-full h-full object-contain"
+                                  />
+                                ) : (
+                                  <img
+                                    src={item.url}
+                                    alt={item.name}
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                                  />
+                                )}
+                                {item.type === 'image' && (
+                                  <div
+                                    onClick={() => setSelectedPreviewMedia(item)}
+                                    className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer text-white font-black text-xs uppercase gap-1"
+                                  >
+                                    <Maximize2 className="w-4 h-4" />
+                                    <span>বড় করে দেখুন</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Who uploaded it (কে আপলোড করেছে) */}
+                              <div className="bg-[#F8FAFC] border border-black p-2 space-y-1.5 text-xs font-bold mb-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] uppercase font-black text-neutral-500 flex items-center gap-1">
+                                    <User className="w-3 h-3 text-[#0066B2]" />
+                                    <span>আপলোডার (UPLOADED BY):</span>
+                                  </span>
+                                  <span className={`text-[9px] font-black px-1.5 py-0.2 border border-black uppercase ${
+                                    item.uploadedBy.userType === 'admin'
+                                      ? 'bg-[#D71920] text-white'
+                                      : item.uploadedBy.userType === 'coach'
+                                      ? 'bg-[#0066B2] text-white'
+                                      : 'bg-[#22C55E] text-black'
+                                  }`}>
+                                    {item.uploadedBy.role || item.uploadedBy.userType || 'MEMBER'}
+                                  </span>
+                                </div>
+                                <div className="text-black font-black flex items-center gap-1.5">
+                                  <span>{item.uploadedBy.name}</span>
+                                  {item.uploadedBy.email && (
+                                    <span className="text-[10px] text-neutral-500 font-normal">
+                                      ({item.uploadedBy.email})
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* When uploaded (কবে ও কখন আপলোড করেছে) & Where (কোথায় আপলোড করেছে) */}
+                              <div className="space-y-1 text-[11px] font-bold text-neutral-700 bg-neutral-50 p-2 border border-black/40">
+                                <div className="flex items-center gap-1.5">
+                                  <Clock className="w-3.5 h-3.5 text-[#D71920] shrink-0" />
+                                  <span className="text-neutral-500">কখন আপলোড:</span>
+                                  <strong className="text-black font-black">{item.timestamp}</strong>
+                                </div>
+
+                                <div className="flex items-center gap-1.5">
+                                  <MapPin className="w-3.5 h-3.5 text-[#22C55E] shrink-0" />
+                                  <span className="text-neutral-500">কোথায় আপলোড:</span>
+                                  <strong className="text-black font-black truncate">{item.destination}</strong>
+                                </div>
+
+                                <div className="text-[10px] text-neutral-500 font-mono pt-1 border-t border-neutral-200 flex items-center justify-between">
+                                  <span className="truncate max-w-[180px]">{item.name}</span>
+                                  {item.size && (
+                                    <span>{(item.size / (1024 * 1024)).toFixed(2)} MB</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Actions: Download, Fullscreen, Delete */}
+                            <div className="flex items-center justify-between pt-2 border-t border-black/20">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedPreviewMedia(item)}
+                                className="bg-[#F0F2F5] hover:bg-neutral-200 text-black border border-black px-2 py-1 text-[10px] font-black uppercase flex items-center gap-1 cursor-pointer"
+                              >
+                                <Eye className="w-3 h-3" />
+                                <span>ফুল ভিউ</span>
+                              </button>
+
+                              <div className="flex items-center gap-1.5">
+                                <a
+                                  href={item.url}
+                                  download={item.name}
+                                  className="bg-[#FFE600] hover:bg-yellow-400 text-black border border-black px-2 py-1 text-[10px] font-black uppercase flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Download className="w-3 h-3" />
+                                  <span>ডাউনলোড</span>
+                                </a>
+
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    if (window.confirm(`⚠️ আপনি কি নিশ্চিত যে আপনি '${item.name}' মিডিয়া ফাইলটি ক্লাউড ভল্ট থেকে মুছে ফেলতে চান?`)) {
+                                      await deleteMediaAuditItem(item.id);
+                                    }
+                                  }}
+                                  className="bg-[#FFF1F2] hover:bg-[#D71920] hover:text-white text-[#D71920] border border-black px-2 py-1 text-[10px] font-black uppercase cursor-pointer"
+                                  title="Delete from Media Vault"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
           ) : (
             /* Raw JSON View Mode */
@@ -609,6 +934,158 @@ export const RealTimeDataView: React.FC = () => {
         </div>
 
       </div>
+
+      {/* ========================================================
+          FULLSCREEN MEDIA PREVIEW & AUDIT DOSSIER MODAL
+         ======================================================== */}
+      {selectedPreviewMedia && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-fadeIn">
+          <div className="bg-white border-4 border-black w-full max-w-3xl max-h-[90vh] flex flex-col shadow-[10px_10px_0px_0px_#FFE600] overflow-hidden">
+            {/* Modal Header */}
+            <div className="bg-black text-white p-3 sm:p-4 border-b-4 border-black flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className={`text-[10px] font-black px-2 py-0.5 border border-white uppercase flex items-center gap-1 ${
+                  selectedPreviewMedia.type === 'video' ? 'bg-[#D71920]' : 'bg-[#0066B2]'
+                }`}>
+                  {selectedPreviewMedia.type === 'video' ? <Film className="w-3.5 h-3.5" /> : <Camera className="w-3.5 h-3.5" />}
+                  <span>{selectedPreviewMedia.type === 'video' ? 'ভিডিও অডিট' : 'ফটো অডিট'}</span>
+                </span>
+                <h4 className="text-sm sm:text-base font-black uppercase text-white truncate max-w-[280px] sm:max-w-md">
+                  {selectedPreviewMedia.name}
+                </h4>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedPreviewMedia(null)}
+                className="w-8 h-8 bg-white text-black hover:bg-[#D71920] hover:text-white border-2 border-white flex items-center justify-center font-black transition-colors cursor-pointer shadow-[2px_2px_0px_0px_#FFE600]"
+                title="Close Preview"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Media Content Body */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+              {/* Media Player Box */}
+              <div className="bg-black border-3 border-black p-2 flex items-center justify-center max-h-[50vh] overflow-hidden">
+                {selectedPreviewMedia.type === 'video' ? (
+                  <video
+                    src={selectedPreviewMedia.url}
+                    controls
+                    autoPlay
+                    className="max-h-[46vh] max-w-full mx-auto object-contain"
+                  />
+                ) : (
+                  <img
+                    src={selectedPreviewMedia.url}
+                    alt={selectedPreviewMedia.name}
+                    className="max-h-[46vh] max-w-full object-contain mx-auto"
+                  />
+                )}
+              </div>
+
+              {/* Comprehensive Audit Telemetry Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* 1. Who uploaded (কে আপলোড করেছে) */}
+                <div className="bg-[#EFF6FF] border-2 border-black p-3 space-y-1.5 shadow-[2px_2px_0px_0px_#000]">
+                  <span className="text-[10px] font-black uppercase text-[#0066B2] flex items-center gap-1">
+                    <User className="w-3.5 h-3.5" />
+                    <span>কে আপলোড করেছে (UPLOADER):</span>
+                  </span>
+                  <div className="text-sm font-black text-black">
+                    {selectedPreviewMedia.uploadedBy.name}
+                  </div>
+                  <div className="text-xs text-neutral-600 truncate">
+                    {selectedPreviewMedia.uploadedBy.email || 'No email registered'}
+                  </div>
+                  <span className={`inline-block text-[9px] font-black px-1.5 py-0.2 border border-black uppercase ${
+                    selectedPreviewMedia.uploadedBy.userType === 'admin'
+                      ? 'bg-[#D71920] text-white'
+                      : selectedPreviewMedia.uploadedBy.userType === 'coach'
+                      ? 'bg-[#0066B2] text-white'
+                      : 'bg-[#22C55E] text-black'
+                  }`}>
+                    {selectedPreviewMedia.uploadedBy.role || selectedPreviewMedia.uploadedBy.userType}
+                  </span>
+                </div>
+
+                {/* 2. When uploaded (কবে ও কখন আপলোড করেছে) */}
+                <div className="bg-[#FFFEEA] border-2 border-black p-3 space-y-1.5 shadow-[2px_2px_0px_0px_#000]">
+                  <span className="text-[10px] font-black uppercase text-[#D71920] flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>কবে ও কখন আপলোড (TIMESTAMP):</span>
+                  </span>
+                  <div className="text-sm font-black text-black">
+                    {selectedPreviewMedia.timestamp}
+                  </div>
+                  <div className="text-[10px] text-neutral-500 font-mono">
+                    {selectedPreviewMedia.isoDate ? new Date(selectedPreviewMedia.isoDate).toUTCString() : 'N/A'}
+                  </div>
+                  <span className="inline-block text-[9px] font-black bg-black text-[#FFE600] px-1.5 py-0.2 border border-black uppercase">
+                    CLOUD VERIFIED
+                  </span>
+                </div>
+
+                {/* 3. Where uploaded (কোথায় আপলোড করেছে) */}
+                <div className="bg-[#F0FDF4] border-2 border-black p-3 space-y-1.5 shadow-[2px_2px_0px_0px_#000]">
+                  <span className="text-[10px] font-black uppercase text-[#22C55E] flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5" />
+                    <span>কোথায় আপলোড করেছে (DESTINATION):</span>
+                  </span>
+                  <div className="text-xs font-black text-black truncate">
+                    {selectedPreviewMedia.destination}
+                  </div>
+                  <div className="text-[10px] text-neutral-600">
+                    কনটেক্সট: <strong className="uppercase">{selectedPreviewMedia.contextType}</strong>
+                  </div>
+                  {selectedPreviewMedia.size && (
+                    <div className="text-[10px] font-mono text-neutral-500">
+                      সাইজ: {(selectedPreviewMedia.size / (1024 * 1024)).toFixed(2)} MB
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer Controls */}
+            <div className="bg-neutral-100 border-t-3 border-black p-3 sm:p-4 flex items-center justify-between gap-3">
+              <a
+                href={selectedPreviewMedia.url}
+                download={selectedPreviewMedia.name}
+                className="bg-[#22C55E] hover:bg-green-600 text-black border-2 border-black px-4 py-2 text-xs font-black uppercase shadow-[2px_2px_0px_0px_#000] flex items-center gap-1.5 active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>ডাউনলোড করুন (DOWNLOAD)</span>
+              </a>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (window.confirm(`⚠️ আপনি কি নিশ্চিত যে আপনি '${selectedPreviewMedia.name}' ফাইলটি স্থায়ীভাবে মুছে ফেলতে চান?`)) {
+                      await deleteMediaAuditItem(selectedPreviewMedia.id);
+                      setSelectedPreviewMedia(null);
+                    }
+                  }}
+                  className="bg-[#FFF1F2] hover:bg-[#D71920] hover:text-white text-[#D71920] border-2 border-black px-3.5 py-2 text-xs font-black uppercase shadow-[2px_2px_0px_0px_#000] flex items-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>মুছে ফেলুন (DELETE)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedPreviewMedia(null)}
+                  className="bg-black hover:bg-neutral-800 text-white border-2 border-black px-4 py-2 text-xs font-black uppercase shadow-[2px_2px_0px_0px_#000] cursor-pointer"
+                >
+                  বন্ধ করুন (CLOSE)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

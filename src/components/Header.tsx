@@ -67,12 +67,20 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
             onClick={openLoginPanel}
             className="flex items-center gap-1.5 bg-[#F6F5EE] hover:bg-[#FFE600] border-2 border-black px-2 py-1 shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
           >
-            <div
-              className="w-5 h-5 border border-black flex items-center justify-center font-black text-[10px] text-white"
-              style={{ backgroundColor: currentUser.avatarBg || '#D71920' }}
-            >
-              {currentUser.name.charAt(0)}
-            </div>
+            {currentUser.photoURL ? (
+              <img
+                src={currentUser.photoURL}
+                alt={currentUser.name}
+                className="w-5 h-5 border border-black object-cover"
+              />
+            ) : (
+              <div
+                className="w-5 h-5 border border-black flex items-center justify-center font-black text-[10px] text-white"
+                style={{ backgroundColor: currentUser.avatarBg || '#D71920' }}
+              >
+                {currentUser.name.charAt(0)}
+              </div>
+            )}
             <span className={`text-[9px] font-black px-1 py-0.2 border border-black uppercase text-white ${
               currentUser.userType === 'admin'
                 ? 'bg-[#D71920]'
@@ -213,12 +221,20 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
           {/* Active User Role Badge & Single Login Box Launcher */}
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
             <div className="flex items-center gap-2 bg-white border-3 border-black p-1.5 shadow-[4px_4px_0px_0px_#000]">
-              <div
-                className="w-8 h-8 border-2 border-black flex items-center justify-center font-black text-xs text-white shrink-0"
-                style={{ backgroundColor: currentUser.avatarBg || '#0066B2' }}
-              >
-                {currentUser.badgeNumber ? `#${currentUser.badgeNumber}` : currentUser.name.charAt(0)}
-              </div>
+              {currentUser.photoURL ? (
+                <img
+                  src={currentUser.photoURL}
+                  alt={currentUser.name}
+                  className="w-8 h-8 border-2 border-black object-cover shrink-0"
+                />
+              ) : (
+                <div
+                  className="w-8 h-8 border-2 border-black flex items-center justify-center font-black text-xs text-white shrink-0"
+                  style={{ backgroundColor: currentUser.avatarBg || '#0066B2' }}
+                >
+                  {currentUser.badgeNumber ? `#${currentUser.badgeNumber}` : currentUser.name.charAt(0)}
+                </div>
+              )}
               <div className="flex flex-col pr-1">
                 <div className="flex items-center gap-1.5">
                   <span className={`text-[9px] font-black px-1.5 py-0.2 border border-black uppercase ${

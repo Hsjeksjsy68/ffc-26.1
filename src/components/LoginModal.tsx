@@ -15,7 +15,8 @@ import {
   Eye,
   EyeOff,
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  Camera
 } from 'lucide-react';
 
 interface LoginModalProps {
@@ -32,8 +33,43 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
     logoutUser,
     loginWithGoogle,
     loginWithEmail,
-    players
+    players,
+    updateUserProfilePhoto
   } = useClub();
+
+  const avatarInputRef = React.useRef<HTMLInputElement>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setErrorMsg('দয়া করে একটি সঠিক ইমেজ ফাইল নির্বাচন করুন।');
+      return;
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      setErrorMsg('ছবির সাইজ ৮ মেগাবাইটের বেশি হতে পারবে না।');
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const dataUrl = event.target?.result as string;
+      await updateUserProfilePhoto(dataUrl);
+      setIsUploadingAvatar(false);
+      setSuccessMsg('✅ প্রোফাইল ছবি সফলভাবে আপডেট করা হয়েছে!');
+      setTimeout(() => setSuccessMsg(null), 3500);
+    };
+    reader.onerror = () => {
+      setIsUploadingAvatar(false);
+      setErrorMsg('ছবি আপলোড করতে ব্যর্থ হয়েছে।');
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
 
   // Mode: 'email' (Email & Pass / Google Login) or 'roles' (Direct 3-Role Selection)
   const [activeTab, setActiveTab] = useState<'email' | 'roles'>('email');
@@ -257,20 +293,53 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
           </button>
         </div>
 
-        {/* Current Active Session Status Banner */}
-        <div className="bg-[#F6F5EE] border-b-2 border-black px-4 py-2 flex items-center justify-between text-xs">
-          <span className="font-bold text-neutral-600 uppercase text-[11px]">
-            CURRENT ACTIVE SESSION:
-          </span>
-          <div className="flex items-center gap-1.5">
-            <span
-              className="w-2.5 h-2.5 rounded-full border border-black"
-              style={{ backgroundColor: currentUser.avatarBg }}
+        {/* Current Active Session Status Banner with Avatar Upload */}
+        <div className="bg-[#F6F5EE] border-b-2 border-black px-4 py-2.5 flex items-center justify-between text-xs gap-2">
+          <div className="flex items-center gap-2.5">
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarUpload}
             />
-            <span className="font-black uppercase text-black">
-              {currentUser.name} ({currentUser.userType?.toUpperCase() || 'MEMBER'})
-            </span>
+            {currentUser.photoURL ? (
+              <img
+                src={currentUser.photoURL}
+                alt={currentUser.name}
+                className="w-9 h-9 rounded-full border-2 border-black object-cover shrink-0 shadow-[1px_1px_0px_0px_#000]"
+              />
+            ) : (
+              <div
+                className="w-9 h-9 rounded-full border-2 border-black flex items-center justify-center font-black text-xs text-white shrink-0 shadow-[1px_1px_0px_0px_#000]"
+                style={{ backgroundColor: currentUser.avatarBg }}
+              >
+                {currentUser.name.charAt(0)}
+              </div>
+            )}
+            <div>
+              <span className="font-bold text-neutral-500 uppercase text-[9px] block">
+                সক্রিয় একাউন্ট (ACTIVE SESSION):
+              </span>
+              <span className="font-black uppercase text-black text-xs">
+                {currentUser.name}
+              </span>
+              <span className="text-[10px] text-neutral-600 block">
+                {currentUser.role}
+              </span>
+            </div>
           </div>
+
+          <button
+            type="button"
+            onClick={() => avatarInputRef.current?.click()}
+            disabled={isUploadingAvatar}
+            className="bg-[#FFE600] hover:bg-yellow-400 text-black border-2 border-black px-2.5 py-1 text-[10px] font-black uppercase shadow-[2px_2px_0px_0px_#000] flex items-center gap-1 cursor-pointer shrink-0 active:translate-x-0.5 active:translate-y-0.5"
+            title="Upload custom account avatar"
+          >
+            <Camera className="w-3.5 h-3.5 text-[#D71920]" />
+            <span>{isUploadingAvatar ? 'আপলোড...' : '📷 ছবি পরিবর্তন'}</span>
+          </button>
         </div>
 
         {/* Tab Switcher: Email / Google Login vs Role Selector */}

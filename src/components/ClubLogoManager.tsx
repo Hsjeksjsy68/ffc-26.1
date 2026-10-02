@@ -512,7 +512,7 @@ export const ClubLogoManager: React.FC = () => {
                   </div>
                   <div>
                     <div className="text-xs font-black uppercase text-black leading-tight">
-                      MARCUS VANCE
+                      FLAMEHUNTER PLAYER
                     </div>
                     <div className="text-[9px] font-bold text-neutral-600 uppercase">
                       SQUAD DOSSIER CREST BADGE

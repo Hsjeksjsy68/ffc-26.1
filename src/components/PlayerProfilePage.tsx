@@ -23,7 +23,9 @@ import {
   UserCheck,
   Phone,
   Clock,
-  Shirt
+  Shirt,
+  Camera,
+  Upload
 } from 'lucide-react';
 
 interface PlayerProfilePageProps {
@@ -45,7 +47,8 @@ export const PlayerProfilePage: React.FC<PlayerProfilePageProps> = ({ playerId, 
     fineRules,
     technicalSettings,
     currentUser,
-    openPlayerProfile
+    openPlayerProfile,
+    updatePlayerPhoto
   } = useClub();
 
   const [activeProfileTab, setActiveProfileTab] = useState<'stats' | 'attendance' | 'discipline' | 'tactics'>('stats');
@@ -55,10 +58,44 @@ export const PlayerProfilePage: React.FC<PlayerProfilePageProps> = ({ playerId, 
   const [fineOffense, setFineOffense] = useState('Late to Training / Team Briefing');
   const [fineNote, setFineNote] = useState('');
   const [saveFeedback, setSaveFeedback] = useState(false);
+  const [photoUploadSuccess, setPhotoUploadSuccess] = useState<string | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const playerPhotoInputRef = React.useRef<HTMLInputElement>(null);
 
   // Find player
   const playerIndex = players.findIndex(p => p.id === playerId);
   const player = players[playerIndex] || players[0];
+
+  const handlePlayerPhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('দয়া করে একটি ইমেজ (JPG/PNG/WEBP) ফাইল নির্বাচন করুন।');
+      return;
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      alert('ছবির সাইজ ৮ মেগাবাইটের বেশি হতে পারবে না।');
+      return;
+    }
+
+    setIsUploadingPhoto(true);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const dataUrl = event.target?.result as string;
+      await updatePlayerPhoto(player.id, dataUrl);
+      setIsUploadingPhoto(false);
+      setPhotoUploadSuccess(`✅ #${player.number} ${player.name}-এর প্রোফাইল ছবি সফলভাবে আপডেট হয়েছে!`);
+      setTimeout(() => setPhotoUploadSuccess(null), 4000);
+    };
+    reader.onerror = () => {
+      setIsUploadingPhoto(false);
+      alert('ছবি আপলোড করতে ব্যর্থ হয়েছে।');
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
 
   // Editable Form State
   const [editForm, setEditForm] = useState<Player>({ ...player });
@@ -217,6 +254,19 @@ export const PlayerProfilePage: React.FC<PlayerProfilePageProps> = ({ playerId, 
         </div>
       </div>
 
+      {/* Photo upload success alert */}
+      {photoUploadSuccess && (
+        <div className="bg-[#22C55E] border-3 border-black p-3 text-black font-black uppercase text-xs shadow-[4px_4px_0px_0px_#000] flex items-center justify-between animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <Check className="w-4 h-4 bg-black text-white p-0.5" />
+            <span>{photoUploadSuccess}</span>
+          </div>
+          <button onClick={() => setPhotoUploadSuccess(null)} className="text-black font-black text-xs hover:underline">
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Success alert message */}
       {saveFeedback && (
         <div className="bg-[#22C55E] border-3 border-black p-3 text-black font-black uppercase text-xs shadow-[4px_4px_0px_0px_#000] flex items-center justify-between">
@@ -235,24 +285,60 @@ export const PlayerProfilePage: React.FC<PlayerProfilePageProps> = ({ playerId, 
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
           {/* Identity Left Column */}
           <div className="flex items-start sm:items-center gap-4 sm:gap-6 flex-wrap sm:flex-nowrap">
-            {/* Massive Jersey Badge */}
-            <div className="relative shrink-0">
-              <div
-                className="w-24 h-28 sm:w-28 sm:h-32 border-4 border-black flex flex-col items-center justify-between p-2 shadow-[4px_4px_0px_0px_#000] select-none"
-                style={{ backgroundColor: player.avatarBg, color: '#fff' }}
+            {/* Massive Jersey / Player Photo Badge */}
+            <div className="relative shrink-0 flex flex-col items-center">
+              {player.photoUrl ? (
+                <div className="w-24 h-28 sm:w-28 sm:h-32 border-4 border-black relative overflow-hidden shadow-[4px_4px_0px_0px_#000] bg-neutral-900 group">
+                  <img
+                    src={player.photoUrl}
+                    alt={player.name}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute top-1 left-1 bg-black/80 text-white text-[10px] font-black px-1.5 py-0.5 border border-white">
+                    #{player.number}
+                  </div>
+                  <div className="absolute bottom-1 right-1 bg-[#FFE600] text-black text-[9px] font-black px-1 border border-black uppercase">
+                    {player.position}
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className="w-24 h-28 sm:w-28 sm:h-32 border-4 border-black flex flex-col items-center justify-between p-2 shadow-[4px_4px_0px_0px_#000] select-none"
+                  style={{ backgroundColor: player.avatarBg, color: '#fff' }}
+                >
+                  <span className="text-[11px] font-black uppercase tracking-widest text-black bg-white px-2 border border-black">
+                    {player.position}
+                  </span>
+                  <span className="text-4xl sm:text-5xl font-black tracking-tighter drop-shadow-[2px_2px_0px_#000]">
+                    #{player.number}
+                  </span>
+                  <span className="text-[9px] font-black tracking-widest uppercase text-yellow-300">
+                    FLAMEHUNTER
+                  </span>
+                </div>
+              )}
+
+              {/* Photo Upload Trigger Button */}
+              <input
+                ref={playerPhotoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePlayerPhotoSelect}
+              />
+              <button
+                type="button"
+                onClick={() => playerPhotoInputRef.current?.click()}
+                disabled={isUploadingPhoto}
+                className="mt-2 w-full bg-[#FFE600] hover:bg-yellow-400 text-black border-2 border-black px-2 py-1 text-[9px] font-black uppercase shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 flex items-center justify-center gap-1 cursor-pointer transition-transform"
+                title="প্লেয়ার প্রোফাইল ছবি আপলোড করুন"
               >
-                <span className="text-[11px] font-black uppercase tracking-widest text-black bg-white px-2 border border-black">
-                  {player.position}
-                </span>
-                <span className="text-4xl sm:text-5xl font-black tracking-tighter drop-shadow-[2px_2px_0px_#000]">
-                  #{player.number}
-                </span>
-                <span className="text-[9px] font-black tracking-widest uppercase text-yellow-300">
-                  FLAMEHUNTER
-                </span>
-              </div>
-              <div className="absolute -bottom-2 -right-2">
-                <FlamehunterLogo size="sm" withShadow />
+                <Camera className="w-3 h-3 text-[#D71920]" />
+                <span>{isUploadingPhoto ? 'আপলোড...' : player.photoUrl ? 'ছবি পরিবর্তন' : '📷 ছবি আপলোড'}</span>
+              </button>
+
+              <div className="absolute -bottom-1 -right-1 pointer-events-none">
+                <FlamehunterLogo size="xs" withShadow />
               </div>
             </div>
 
